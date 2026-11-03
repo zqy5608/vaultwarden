@@ -8,6 +8,7 @@ concurrency:
   cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
