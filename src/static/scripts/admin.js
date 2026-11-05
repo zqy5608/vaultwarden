@@ -72,6 +72,147 @@ function _delete(url, successMsg, errMsg, body, reload_page = true) {
     return _fetch("DELETE", url, successMsg, errMsg, body, reload_page);
 }
 
+let agentFolderRequest = 0;
+let agentFoldersLoadedFor = "";
+let agentFoldersDisplayedFor = "";
+let agentFolderPending = null;
+let agentFolderPendingEmail = "";
+
+function setAgentFolderStatus(text) {
+    const status = document.getElementById("agent-folder-status");
+    if (status) {
+        status.textContent = text || "";
+    }
+}
+
+function setAgentFolderMessage(text) {
+    const list = document.getElementById("agent-folder-list");
+    const actions = document.getElementById("agent-folder-actions");
+    if (!list) {
+        return;
+    }
+    if (actions) {
+        actions.hidden = true;
+    }
+    agentFoldersDisplayedFor = "";
+    list.replaceChildren();
+    const note = document.createElement("span");
+    note.className = "text-body-secondary";
+    note.textContent = text;
+    list.appendChild(note);
+}
+
+function agentFolderChoices(folders) {
+    const rows = folders.filter((folder) => folder && folder.id).map((folder) => ({
+        id: String(folder.id),
+        text: String(folder.label || folder.name || folder.id)
+    }));
+    const counts = new Map();
+    rows.forEach((folder) => {
+        counts.set(folder.text, (counts.get(folder.text) || 0) + 1);
+    });
+    return rows.map((folder) => ({
+        id: folder.id,
+        text: counts.get(folder.text) > 1 ? `${folder.text} (${folder.id.slice(0, 8)})` : folder.text
+    }));
+}
+
+function loadAgentFolders(email) {
+    const list = document.getElementById("agent-folder-list");
+    const actions = document.getElementById("agent-folder-actions");
+    const normalized = email.trim().toLowerCase();
+    if (agentFolderPending && agentFolderPendingEmail === normalized) {
+        return agentFolderPending;
+    }
+    agentFoldersLoadedFor = "";
+    agentFoldersDisplayedFor = "";
+    if (!list) {
+        return Promise.resolve(false);
+    }
+    if (!normalized) {
+        setAgentFolderMessage("Enter a user email to load folders.");
+        return Promise.resolve(false);
+    }
+    const request = ++agentFolderRequest;
+    setAgentFolderStatus("");
+    setAgentFolderMessage("Loading folders…");
+    const url = `${BASE_URL}/admin/agent/users/folders?email=${encodeURIComponent(email.trim())}`;
+    const pending = fetch(url, {
+        method: "GET",
+        mode: "same-origin",
+        credentials: "same-origin",
+        headers: { "Accept": "application/json" }
+    }).then(async (resp) => {
+        if (request !== agentFolderRequest) {
+            return false;
+        }
+        const text = await resp.text();
+        let data = {};
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            data = {};
+        }
+        if (!resp.ok) {
+            setAgentFolderMessage(data.message || "Could not load folders.");
+            return false;
+        }
+        const folders = agentFolderChoices(Array.isArray(data.folders) ? data.folders : []);
+        list.replaceChildren();
+        if (folders.length === 0) {
+            if (actions) {
+                actions.hidden = true;
+            }
+            const note = document.createElement("span");
+            note.className = "text-body-secondary";
+            const tokenForm = document.getElementById("agent-token-form");
+            const requireAcl = tokenForm !== null && tokenForm.dataset.requireFolderAcl === "true";
+            note.textContent = requireAcl
+                ? "This user has no folders. Create a folder in the vault, or turn off the folder allowlist requirement."
+                : "This user has no folders. The token can still see eligible personal logins.";
+            list.appendChild(note);
+        } else {
+            if (actions) {
+                actions.hidden = false;
+            }
+            folders.forEach((folder) => {
+                const row = document.createElement("div");
+                row.className = "form-check";
+                const input = document.createElement("input");
+                input.className = "form-check-input";
+                input.type = "checkbox";
+                input.value = folder.id;
+                input.id = `agent-folder-${folder.id}`;
+                const label = document.createElement("label");
+                label.className = "form-check-label";
+                label.htmlFor = input.id;
+                label.textContent = folder.text;
+                label.title = folder.id;
+                row.append(input, label);
+                list.appendChild(row);
+            });
+        }
+        agentFoldersLoadedFor = normalized;
+        agentFoldersDisplayedFor = normalized;
+        return true;
+    }).catch(() => {
+        if (request !== agentFolderRequest) {
+            return false;
+        }
+        setAgentFolderMessage("Could not load folders.");
+        return false;
+    });
+    agentFolderPending = pending;
+    agentFolderPendingEmail = normalized;
+    pending.finally(() => {
+        if (agentFolderPending === pending) {
+            agentFolderPending = null;
+            agentFolderPendingEmail = "";
+        }
+    });
+    return pending;
+}
+
 function createScopedCredential(url, body) {
     fetch(url, {
         method: "POST",
@@ -186,17 +327,61 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
 
     const agentTokenForm = document.getElementById("agent-token-form");
     const fillAgentForm = document.getElementById("fill-agent-form");
+    const agentUserEmail = document.getElementById("agent-user-email");
+    if (agentUserEmail) {
+        agentUserEmail.addEventListener("input", () => {
+            const normalized = agentUserEmail.value.trim().toLowerCase();
+            agentFoldersLoadedFor = normalized === agentFoldersDisplayedFor ? agentFoldersDisplayedFor : "";
+        });
+        agentUserEmail.addEventListener("change", () => {
+            loadAgentFolders(agentUserEmail.value);
+        });
+    }
+    const folderAll = document.getElementById("agent-folder-all");
+    const folderNone = document.getElementById("agent-folder-none");
+    if (folderAll) {
+        folderAll.addEventListener("click", () => {
+            document.querySelectorAll("#agent-folder-list input[type=checkbox]").forEach((input) => {
+                input.checked = true;
+            });
+        });
+    }
+    if (folderNone) {
+        folderNone.addEventListener("click", () => {
+            document.querySelectorAll("#agent-folder-list input[type=checkbox]").forEach((input) => {
+                input.checked = false;
+            });
+        });
+    }
     if (agentTokenForm) {
         agentTokenForm.addEventListener("submit", (event) => {
             event.preventDefault();
-            const folderIds = document.getElementById("agent-folder-ids").value
-                .split(",")
-                .map((value) => value.trim())
-                .filter(Boolean);
-            createScopedCredential(`${BASE_URL}/admin/agent/tokens`, {
-                userEmail: document.getElementById("agent-user-email").value,
-                name: document.getElementById("agent-token-name").value,
-                folderIds,
+            const email = document.getElementById("agent-user-email").value.trim();
+            const normalized = email.toLowerCase();
+            const createToken = () => {
+                const requireAcl = agentTokenForm.dataset.requireFolderAcl === "true";
+                const folderIds = [...document.querySelectorAll("#agent-folder-list input[type=checkbox]:checked")]
+                    .map((input) => input.value);
+                if (requireAcl && folderIds.length === 0) {
+                    msg("Select at least one folder. A folder allowlist is required.", false);
+                    return;
+                }
+                setAgentFolderStatus("");
+                createScopedCredential(`${BASE_URL}/admin/agent/tokens`, {
+                    userEmail: email,
+                    name: document.getElementById("agent-token-name").value,
+                    folderIds,
+                });
+            };
+            // Show the folder names before storing an allowlist, including an empty one.
+            if (agentFoldersLoadedFor === normalized && normalized !== "") {
+                createToken();
+                return;
+            }
+            loadAgentFolders(email).then((ok) => {
+                if (ok && agentFoldersLoadedFor === normalized) {
+                    setAgentFolderStatus("Folders loaded. Review the selection, then create the token.");
+                }
             });
         });
     }

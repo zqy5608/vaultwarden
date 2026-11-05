@@ -64,6 +64,20 @@ pub fn agent_can_see_item(require_folder_acl: bool, allowed_folders: &[String], 
     item_folder.is_some_and(|folder| allowed_folders.iter().any(|allowed| allowed == folder))
 }
 
+/// Label for the admin folder picker. Ciphertext names stay out of the checkbox text.
+pub fn folder_picker_label(name: &str, id: &str) -> String {
+    let name = name.trim();
+    if !name.is_empty() && !looks_like_ciphertext(name) {
+        return name.to_owned();
+    }
+    let short: String = id.chars().take(8).collect();
+    if short.is_empty() {
+        "Encrypted folder".to_owned()
+    } else {
+        format!("Encrypted folder ({short})")
+    }
+}
+
 pub fn agent_can_fill(visible: bool, reprompt: bool) -> bool {
     visible && !reprompt
 }
@@ -427,15 +441,31 @@ mod tests {
     #[test]
     fn folder_acl_hides_items_outside_the_allowlist() {
         assert!(!agent_can_see_item(true, &[], Some("folder-1")));
+        assert!(!agent_can_see_item(true, &[], None));
         assert!(agent_can_see_item(false, &[], Some("folder-1")));
         assert!(agent_can_see_item(false, &[], None));
         let allowed = vec!["folder-1".to_owned()];
         assert!(agent_can_see_item(true, &allowed, Some("folder-1")));
         assert!(!agent_can_see_item(true, &allowed, Some("folder-2")));
         assert!(!agent_can_see_item(true, &allowed, None));
+        assert!(agent_can_see_item(false, &allowed, Some("folder-1")));
+        assert!(!agent_can_see_item(false, &allowed, Some("folder-2")));
+        assert!(!agent_can_see_item(false, &allowed, None));
         assert!(!agent_can_fill(false, false));
         assert!(!agent_can_fill(true, true));
         assert!(agent_can_fill(true, false));
+    }
+
+    #[test]
+    fn folder_picker_label_uses_plaintext_names() {
+        assert_eq!(folder_picker_label("Work", "11111111-2222-3333-4444-555555555555"), "Work");
+        assert_eq!(folder_picker_label("  Personal  ", "11111111-2222-3333-4444-555555555555"), "Personal");
+        assert_eq!(
+            folder_picker_label("2.ivvalue|ctvalue|macvalue", "abcdef12-2222-3333-4444-555555555555"),
+            "Encrypted folder (abcdef12)"
+        );
+        assert_eq!(folder_picker_label("   ", "abcdef12-2222-3333-4444-555555555555"), "Encrypted folder (abcdef12)");
+        assert_eq!(folder_picker_label("", ""), "Encrypted folder");
     }
 
     #[test]
