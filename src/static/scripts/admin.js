@@ -84,6 +84,15 @@ function agentEmailLooksUsable(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+// Missing controls must not throw. A stale page used to read .value of a removed node and the click died.
+function agentFieldValue(id) {
+    const field = document.getElementById(id);
+    if (!field || typeof field.value !== "string") {
+        return null;
+    }
+    return field.value;
+}
+
 function agentFolderEmailStillCurrent(normalized) {
     const field = document.getElementById("agent-user-email");
     return field !== null && field.value.trim().toLowerCase() === normalized;
@@ -127,7 +136,11 @@ function scheduleAgentFolderLoad(email, delay) {
         if (!agentFolderEmailStillCurrent(normalized)) {
             return;
         }
-        loadAgentFolders(document.getElementById("agent-user-email").value);
+        const emailValue = agentFieldValue("agent-user-email");
+        if (emailValue === null) {
+            return;
+        }
+        loadAgentFolders(emailValue);
     };
     if (delay <= 0) {
         startLoad();
@@ -473,7 +486,13 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
                 clearTimeout(agentFolderLoadTimer);
                 agentFolderLoadTimer = 0;
             }
-            const email = document.getElementById("agent-user-email").value.trim();
+            const emailValue = agentFieldValue("agent-user-email");
+            const nameValue = agentFieldValue("agent-token-name");
+            if (emailValue === null || nameValue === null) {
+                msg("Could not read this form. Reload the page and try again.", false);
+                return;
+            }
+            const email = emailValue.trim();
             const normalized = email.toLowerCase();
             const requireAcl = agentTokenForm.dataset.requireFolderAcl === "true";
             const selectedFolderIds = () => [...document.querySelectorAll("#agent-folder-list input[type=checkbox]:checked")]
@@ -482,7 +501,7 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
                 setAgentFolderStatus("");
                 createScopedCredential(`${BASE_URL}/admin/agent/tokens`, {
                     userEmail: email,
-                    name: document.getElementById("agent-token-name").value,
+                    name: nameValue,
                     folderIds,
                 });
             };
@@ -514,9 +533,15 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
     if (fillAgentForm) {
         fillAgentForm.addEventListener("submit", (event) => {
             event.preventDefault();
+            const userEmail = agentFieldValue("fill-agent-email");
+            const name = agentFieldValue("fill-agent-name");
+            if (userEmail === null || name === null) {
+                msg("Could not read this form. Reload the page and try again.", false);
+                return;
+            }
             createScopedCredential(`${BASE_URL}/admin/agent/fill-agents`, {
-                userEmail: document.getElementById("fill-agent-email").value,
-                name: document.getElementById("fill-agent-name").value,
+                userEmail,
+                name,
             });
         });
     }
