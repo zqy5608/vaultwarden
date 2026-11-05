@@ -1,0 +1,3 @@
+# AES-256-CBC for local Bitwarden EncString decryption in fill_agent.py.
+# HTTP uses the stdlib urllib client. ai_agent.py does not import this package.
+cryptography>=41.0.7
