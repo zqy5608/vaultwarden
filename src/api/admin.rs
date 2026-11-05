@@ -1215,6 +1215,8 @@ mod tests {
         assert!(acl_off.contains("All eligible logins"));
         assert!(!acl_off.contains("agent-folder-ids"));
         assert!(acl_off.contains("id=\"fill-agent-form\""));
+        assert!(acl_off.contains("Agent sites"));
+        assert!(acl_off.contains("publish_uri.py"));
 
         let acl_on = render(true);
         assert!(acl_on.contains("data-require-folder-acl=\"true\""));

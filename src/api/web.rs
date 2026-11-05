@@ -151,9 +151,63 @@ fn vaultwarden_css() -> EtagCached<String> {
     EtagCached::new(cached.css.clone(), ContentType::CSS, &cached.etag)
 }
 
+/// The official web vault encrypts login URIs before save, so the server cannot
+/// index them. While the Agent API is on, the vault shell loads a same-origin
+/// script that publishes websites the unlocked user confirms.
 #[get("/")]
-async fn web_index() -> Cached<Option<NamedFile>> {
-    Cached::short(NamedFile::open(Path::new(&CONFIG.web_vault_folder()).join("index.html")).await.ok(), false)
+async fn web_index() -> Cached<Option<Html<String>>> {
+    let path = Path::new(&CONFIG.web_vault_folder()).join("index.html");
+    let Ok(html) = tokio::fs::read_to_string(&path).await else {
+        return Cached::short(None, false);
+    };
+    let html = if CONFIG.agent_api_enabled() {
+        inject_agent_uri_script(&html, &CONFIG.domain_path())
+    } else {
+        html
+    };
+    Cached::short(Some(Html(html)), false)
+}
+
+fn inject_agent_uri_script(html: &str, domain_path: &str) -> String {
+    const MARKER: &str = "data-vw-agent-uri";
+    if html.contains(MARKER) {
+        return html.to_owned();
+    }
+    let Some(path) = sanitized_domain_path(domain_path) else {
+        warn!("Agent sites control was not added because the domain path is not a simple URL path");
+        return html.to_owned();
+    };
+    let tag = format!(r#"<script src="{path}/vw_static/vw-agent-uri.js" data-vw-agent-uri="{path}" defer></script>"#);
+    if let Some(index) = html.rfind("</body>") {
+        let mut out = String::with_capacity(html.len() + tag.len());
+        out.push_str(&html[..index]);
+        out.push_str(&tag);
+        out.push_str(&html[index..]);
+        return out;
+    }
+    let mut out = String::with_capacity(html.len() + tag.len());
+    out.push_str(html);
+    out.push_str(&tag);
+    out
+}
+
+/// `domain_path` is empty or an absolute path of dot-free segments. Anything else
+/// is left out of the HTML so a strange config value cannot break the script tag.
+fn sanitized_domain_path(domain_path: &str) -> Option<&str> {
+    let path = domain_path.trim_end_matches('/');
+    if path.is_empty() {
+        return Some("");
+    }
+    if !path.starts_with('/') {
+        return None;
+    }
+    let safe = path.split('/').skip(1).all(|segment| {
+        !segment.is_empty()
+            && segment != "."
+            && segment != ".."
+            && segment.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    });
+    safe.then_some(path)
 }
 
 // Make sure that `/index.html` redirect to actual domain path.
@@ -295,6 +349,7 @@ pub static STATIC_FILES: LazyLock<HashMap<&'static str, StaticFile>> = LazyLock:
         ("404.css", ContentType::CSS, &include_bytes!("../static/scripts/404.css")[..]),
         ("admin.css", ContentType::CSS, &include_bytes!("../static/scripts/admin.css")[..]),
         ("admin.js", ContentType::JavaScript, &include_bytes!("../static/scripts/admin.js")[..]),
+        ("vw-agent-uri.js", ContentType::JavaScript, &include_bytes!("../static/scripts/vw-agent-uri.js")[..]),
         ("admin_settings.js", ContentType::JavaScript, &include_bytes!("../static/scripts/admin_settings.js")[..]),
         ("admin_users.js", ContentType::JavaScript, &include_bytes!("../static/scripts/admin_users.js")[..]),
         (
@@ -326,6 +381,45 @@ pub static STATIC_FILES: LazyLock<HashMap<&'static str, StaticFile>> = LazyLock:
     })
     .collect()
 });
+
+#[cfg(test)]
+mod tests {
+    use super::{STATIC_FILES, inject_agent_uri_script};
+
+    #[test]
+    fn agent_uri_script_injects_once_before_body() {
+        let html = "<html><body><app-root></app-root></body></html>";
+        let once = inject_agent_uri_script(html, "");
+        assert!(once.contains(r#"src="/vw_static/vw-agent-uri.js""#));
+        assert!(once.contains(r#"data-vw-agent-uri="""#));
+        assert!(once.find("vw-agent-uri.js").unwrap() < once.find("</body>").unwrap());
+        let twice = inject_agent_uri_script(&once, "");
+        assert_eq!(twice.matches("vw-agent-uri.js").count(), 1);
+    }
+
+    #[test]
+    fn agent_uri_script_uses_a_safe_domain_path() {
+        let html = "<html></html>";
+        let injected = inject_agent_uri_script(html, "/vault/");
+        assert!(injected.contains(r#"src="/vault/vw_static/vw-agent-uri.js""#));
+        assert!(injected.contains(r#"data-vw-agent-uri="/vault""#));
+        assert!(injected.ends_with(
+            "</html><script src=\"/vault/vw_static/vw-agent-uri.js\" data-vw-agent-uri=\"/vault\" defer></script>"
+        ));
+        assert_eq!(inject_agent_uri_script(html, "/va ult"), html);
+        assert_eq!(inject_agent_uri_script(html, "/../x"), html);
+        assert_eq!(inject_agent_uri_script(html, "vault"), html);
+    }
+
+    #[test]
+    fn agent_uri_script_is_a_static_file() {
+        let file = STATIC_FILES.get("vw-agent-uri.js").expect("vw-agent-uri.js");
+        let source = std::str::from_utf8(file.bytes).expect("utf-8");
+        assert!(source.contains("Agent sites"));
+        assert!(source.contains("/uri-index"));
+        assert!(!source.contains("innerHTML"));
+    }
+}
 
 #[get("/vw_static/<filename>", rank = 2)]
 pub fn static_files(filename: &str) -> Result<EtagCached<&'static [u8]>, Error> {

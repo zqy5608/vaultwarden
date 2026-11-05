@@ -7,7 +7,8 @@ pending or redeem, and it does not read VW_FILL_TOKEN or BW_USER_KEY.
 
 The fill agent id is the public UUID from /admin/agents, not the vwfill_
 secret. Create fill returns "Origin not allowed" until that item has a
-published URI index. This script does not publish the index.
+published URI index. Publish it with publish_uri.py or the web vault
+Agent sites button. This script does not publish the index.
 """
 
 from __future__ import annotations
@@ -34,10 +35,10 @@ _STATUS_KEYS = ("object", "id", "status", "expiresAt")
 _HINTS = {
     "Origin not allowed": (
         "This item has no published URI index entry for that origin. "
-        "Publish one with the vault user's access token (not the vwagent_ token): "
-        "PUT /api/agent/items/<item-id>/uri-index "
-        '{"uris":[{"uri":"https://host/path","match":1}]}. '
-        "This client does not publish the index."
+        "Unlock the web vault, open the login, and use Agent sites. "
+        "Or run publish_uri.py publish --item <item-id> --email <vault-user> "
+        "(PUT /api/agent/items/<item-id>/uri-index). "
+        "vwagent_ cannot publish the index."
     ),
     "Invalid origin": "Pass an http or https origin, for example https://example.com.",
     "Fill agent not available": (

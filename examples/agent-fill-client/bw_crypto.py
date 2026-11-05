@@ -208,6 +208,39 @@ def decrypt_fill(
     )
 
 
+def decrypt_to_bytes(value: str, key: bytes) -> bytes:
+    """Decrypt a type 0 or type 2 EncString and return the raw plaintext.
+
+    Use this for wrapped keys. Login fields that are text should go through
+    ``decrypt_fill`` instead, which refuses to return ciphertext as a value.
+    """
+
+    parsed = _parse_supported(value)
+    if parsed is None:
+        unsupported = _unsupported_type(value)
+        if unsupported is not None:
+            raise BitwardenCryptoError(
+                f"unsupported Bitwarden encryption type {unsupported} "
+                "(this client decrypts AES-CBC type 0 and type 2 only)"
+            )
+        raise BitwardenCryptoError("value is not a type 0 or type 2 EncString")
+    return _decrypt_parsed(parsed, _split_key(key))
+
+
+def decode_key_bytes(raw: bytes) -> bytes:
+    """Accept a 32- or 64-byte key, or the older base64 text of that key."""
+
+    if len(raw) in (32, 64):
+        return raw
+    try:
+        decoded = _b64decode(raw.decode("utf-8").strip())
+    except (UnicodeDecodeError, ValueError):
+        raise BitwardenCryptoError("unwrapped key must be 32 or 64 bytes") from None
+    if len(decoded) not in (32, 64):
+        raise BitwardenCryptoError("unwrapped key must be 32 or 64 bytes")
+    return decoded
+
+
 def _untouched(value: object) -> FieldText:
     """Plaintext stays readable when the item key cannot be unwrapped."""
 
