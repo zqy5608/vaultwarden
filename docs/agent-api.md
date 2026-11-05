@@ -40,9 +40,40 @@ On `/admin/agents`, enter the user email and the page loads that user's folders.
 
 Matching uses a server-side URI index, because vault URIs are normally encrypted and cannot be read here.
 
-- Saving a cipher indexes plaintext `http`/`https` URIs automatically.
-- Encrypted URIs are ignored and do not wipe a previously published index.
-- The vault user (normal login, not the AI token) can publish decrypted origins:
+### When a save already contains plaintext websites
+
+Saving a personal login indexes plaintext `http` and `https` URIs from the cipher data. Query strings and URL userinfo are stripped. Official Bitwarden clients encrypt URIs before they are saved, so this path indexes nothing for those items. An encrypted save does not delete a URI index that was already published.
+
+### From the unlocked web vault
+
+When the Agent API is enabled, the web vault page loads `/vw_static/vw-agent-uri.js` and shows **Agent sites**. Unlock the vault, open a personal login, and use the button. It reads the user access token already stored in that tab and sends only the websites you confirm. It does not read password fields, and an AI token cannot call it.
+
+The script is added to the web vault shell by this server. It is not a fork of the official web vault. If a future web vault moves the access token out of the tab, the button says the vault is locked and `publish_uri.py` still works.
+
+### From the command line
+
+`examples/agent-fill-client/publish_uri.py` is the path that does not need the web vault button.
+
+Sign in as the vault user. The master password is used to derive the account key and is not sent as itself. Websites are decrypted in that process. Passwords are not decrypted and are not printed. Authenticator, email, and YubiKey codes work. WebAuthn and Duo stay on the web vault button.
+
+```bash
+export VW_BASE_URL=https://vault.example.com
+python3 examples/agent-fill-client/publish_uri.py publish --email you@example.com --name Example
+python3 examples/agent-fill-client/publish_uri.py publish --email you@example.com --all
+```
+
+A one-shot user access token can publish websites you already know. `vwagent_` and `vwfill_` are rejected.
+
+```bash
+export VW_USER_TOKEN='<vault user access token>'
+python3 examples/agent-fill-client/publish_uri.py put --item <cipher-id> --uri https://example.com/login
+```
+
+`VW_USER_TOKEN` plus `BW_USER_KEY` (the unlocked key from `bw unlock`) publishes decrypted websites without asking for the master password again.
+
+### Direct request
+
+The vault user (normal login, not the AI token) can also call the route directly:
 
 ```http
 PUT /api/agent/items/<cipher-id>/uri-index
@@ -54,6 +85,14 @@ Authorization: Bearer <user access token>
 `DELETE` on that path clears the index.
 
 Default match (null) is strict host, scheme, and port. `example.com` does not allow `login.example.com`. Match type `0` allows subdomains of the item host, not the parent and not a different registrable name. IP literals are denied unless `AGENT_ALLOW_IP_ORIGINS=true`. Regex match (type `4`) is denied unless `AGENT_ALLOW_REGEX_URI_MATCH=true`, and patterns containing `.*` or `.+` are still rejected.
+
+### Which path to use
+
+- Plaintext cipher data is indexed on save. Encrypted clients never take this path, so it is not enough on its own.
+- **Agent sites** is the one-click path on this server. It needs the official web vault to keep the user access token in the unlocked tab. It does not require copying a bearer token out of DevTools.
+- `publish_uri.py` works against the current API, including before the button is deployed. Password login avoids hunting for a token. WebAuthn and Duo are not entered by the script.
+- A cipher-save field for already-decrypted origins would not run for official clients unless the web vault were forked. This server does not add that field.
+- The AI token stays unable to publish or decrypt. `uri-index` remains limited to the owning user. Operators do not insert rows into the database.
 
 ## Fill ticket
 

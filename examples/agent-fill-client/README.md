@@ -182,7 +182,32 @@ Run that from this directory, or add it to `PYTHONPATH`. `value` is never the or
 
 Create fill returns `Origin not allowed` when the item has no published URI index entry for that origin. Vault URIs are normally ciphertext, so the server cannot read them. Saving a cipher indexes plaintext `http` and `https` URIs only. Encrypted URIs are ignored and do not clear an older index.
 
-Publish origins with the vault user's own access token. `vwagent_` and `vwfill_` are rejected on this route. This example does not publish the index, and you do not need to edit the database.
+Publish with the vault user, not with `vwagent_` or `vwfill_`. Nothing here edits the database.
+
+On the web vault, unlock, open the personal login, and use **Agent sites**. That button is served by this fork when the Agent API is enabled. It asks before it sends websites, and it does not read password fields.
+
+From a shell, `publish_uri.py` signs in with the account email and master password (or uses a one-shot user access token) and publishes websites. Passwords are not decrypted and are not printed. Set `VW_MASTER_PASSWORD` only for a non-interactive run. The prompt is the normal path. WebAuthn and Duo are not entered here; use Agent sites for those accounts.
+
+```bash
+export VW_BASE_URL=https://vault.bo0lean.com
+python3 publish_uri.py publish --email you@example.com --name Example
+python3 publish_uri.py publish --email you@example.com --item <cipher-uuid>
+python3 publish_uri.py publish --email you@example.com --all
+
+# Websites you already know, with a one-shot user access token:
+export VW_USER_TOKEN='<vault user access token>'
+python3 publish_uri.py put --item <cipher-uuid> --uri https://example.com/login
+
+# Unlocked key from `bw unlock`, plus the same user access token:
+export BW_USER_KEY="$BW_SESSION"
+python3 publish_uri.py publish --item <cipher-uuid>
+
+python3 publish_uri.py clear --item <cipher-uuid>
+```
+
+`--dry-run` prints the websites and does not call uri-index. A password sign-in still contacts the server so it can read the vault. `put --dry-run` and `clear --dry-run` do not.
+
+The direct route, if you already have a user access token, is:
 
 ```http
 PUT /api/agent/items/<cipher-id>/uri-index
@@ -192,9 +217,9 @@ Content-Type: application/json
 {"uris":[{"uri":"https://example.com/login","match":1}]}
 ```
 
-Use the item id from `ai_agent.py items`. The indexed URI can include a path; matching uses the origin (`https://example.com`). Request the fill with that origin. Match `1` (and the default null match) requires the same scheme, host, and port. `example.com` does not allow `login.example.com`. Match `0` allows subdomains of the indexed host. `DELETE /api/agent/items/<cipher-id>/uri-index` clears it.
+Use the item id from `ai_agent.py items` or from the login's URL in the web vault. The indexed URI can include a path; matching uses the origin (`https://example.com`). Request the fill with that origin. Match `1` (and the default null match) requires the same scheme, host, and port. `example.com` does not allow `login.example.com`. Match `0` allows subdomains of the indexed host. `DELETE /api/agent/items/<cipher-id>/uri-index` clears it.
 
-IP literals are denied unless the server has `AGENT_ALLOW_IP_ORIGINS=true`. The user access token is the normal Bitwarden login token, not `BW_USER_KEY` and not an agent token.
+IP literals are denied unless the server has `AGENT_ALLOW_IP_ORIGINS=true`. The user access token is the normal Bitwarden login token, not `BW_USER_KEY` and not an agent token. `BW_USER_KEY` is only the local decryption key.
 
 ## Security
 
@@ -211,6 +236,7 @@ From the repository root:
 
 ```bash
 python3 examples/agent-fill-client/test_client.py
+python3 examples/agent-fill-client/test_publish.py
 ```
 
-Crypto tests build EncStrings with OpenSSL AES-256-CBC and check HMAC-SHA256 in the test, then decrypt through `bw_crypto.py`. The CLI tests run both scripts against a local stand-in of the Agent API and assert that the AI stdout never contains a password, a redeem secret, or the fill token.
+Crypto tests build EncStrings with OpenSSL AES-256-CBC and check HMAC-SHA256 in the test, then decrypt through `bw_crypto.py`. The CLI tests run the scripts against a local stand-in and assert that stdout never contains a password, a redeem secret, or a fill token. `test_publish.py` also checks that `publish_uri.py` sends websites only.
