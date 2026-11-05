@@ -24,7 +24,8 @@ use crate::{
     db::{
         ACTIVE_DB_TYPE, DbConn, DbConnType, backup_sqlite, get_sql_server_version,
         models::{
-            Attachment, Cipher, Collection, Device, Event, EventType, Group, Invitation, Membership, MembershipId,
+            AgentAudit, AgentToken, AgentTokenFolder, AgentTokenId, Attachment, Cipher, Collection, Device, Event,
+            EventType, FillAgent, FillAgentId, Folder, FolderId, Group, Invitation, Membership, MembershipId,
             MembershipType, OrgPolicy, Organization, OrganizationId, SsoUser, TwoFactor, User, UserId,
         },
     },
@@ -71,6 +72,11 @@ pub fn routes() -> Vec<Route> {
         get_diagnostics_config,
         resend_user_invite,
         get_diagnostics_http,
+        agents_overview,
+        create_agent_token,
+        revoke_agent_token,
+        create_fill_agent,
+        revoke_fill_agent,
     ]
 }
 
@@ -911,6 +917,171 @@ impl<'r> FromRequest<'r> for AdminToken {
             ip,
         })
     }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateAgentTokenBody {
+    user_email: String,
+    name: String,
+    #[serde(default)]
+    folder_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateFillAgentBody {
+    user_email: String,
+    name: String,
+}
+
+fn clean_agent_name(name: &str) -> Result<String, Error> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 128 || name.chars().any(char::is_control) {
+        err!("Name is invalid");
+    }
+    Ok(name.to_owned())
+}
+
+async fn agent_user_by_email(email: &str, conn: &DbConn) -> Result<User, Error> {
+    let Some(user) = User::find_by_mail(email.trim(), conn).await else {
+        err!("User not found");
+    };
+    if !user.enabled {
+        err!("User is disabled");
+    }
+    Ok(user)
+}
+
+#[get("/agents")]
+async fn agents_overview(_token: AdminToken, conn: DbConn) -> ApiResult<Html<String>> {
+    let mut tokens = Vec::new();
+    for token in AgentToken::list_all(&conn).await {
+        let email = User::find_by_uuid(&token.user_uuid, &conn).await.map(|user| user.email).unwrap_or_default();
+        let folders = AgentTokenFolder::folders_for_token(&token.uuid, &conn).await;
+        tokens.push(json!({
+            "id": token.uuid,
+            "email": email,
+            "name": token.name,
+            "tokenPrefix": token.token_prefix,
+            "folderIds": folders,
+            "createdAt": format_naive_datetime_local(&token.created_at, DT_FMT),
+            "revoked": token.revoked_at.is_some(),
+        }));
+    }
+    let mut fill_agents = Vec::new();
+    for agent in FillAgent::list_all(&conn).await {
+        let email = User::find_by_uuid(&agent.user_uuid, &conn).await.map(|user| user.email).unwrap_or_default();
+        fill_agents.push(json!({
+            "id": agent.uuid,
+            "email": email,
+            "name": agent.name,
+            "tokenPrefix": agent.token_prefix,
+            "createdAt": format_naive_datetime_local(&agent.created_at, DT_FMT),
+            "revoked": agent.revoked_at.is_some(),
+        }));
+    }
+    let mut audit = Vec::new();
+    for event in AgentAudit::recent(&conn).await {
+        audit.push(json!({
+            "createdAt": format_naive_datetime_local(&event.created_at, DT_FMT),
+            "action": event.action,
+            "detail": event.detail,
+            "origin": event.origin,
+            "ip": event.ip_address,
+        }));
+    }
+    let text = AdminTemplateData::new(
+        "admin/agents",
+        json!({
+            "enabled": CONFIG.agent_api_enabled(),
+            "requireFolderAcl": CONFIG.agent_require_folder_acl(),
+            "tokens": tokens,
+            "fillAgents": fill_agents,
+            "audit": audit,
+        }),
+    )
+    .render()?;
+    Ok(Html(text))
+}
+
+#[post("/agent/tokens", format = "application/json", data = "<body>")]
+async fn create_agent_token(body: Json<CreateAgentTokenBody>, _token: AdminToken, conn: DbConn) -> JsonResult {
+    let name = clean_agent_name(&body.name)?;
+    let user = agent_user_by_email(&body.user_email, &conn).await?;
+    let mut folders = Vec::new();
+    for folder_id in &body.folder_ids {
+        let folder_id = folder_id.trim();
+        if folder_id.is_empty() {
+            continue;
+        }
+        if uuid::Uuid::parse_str(folder_id).is_err() {
+            err!("Folder is invalid");
+        }
+        let folder_id = FolderId::from(folder_id.to_owned());
+        if Folder::find_by_uuid_and_user(&folder_id, &user.uuid, &conn).await.is_none() {
+            err!("Folder does not belong to that user");
+        }
+        if !folders.contains(&folder_id) {
+            folders.push(folder_id);
+        }
+    }
+    if CONFIG.agent_require_folder_acl() && folders.is_empty() {
+        err!("A folder allowlist is required while AGENT_REQUIRE_FOLDER_ACL is enabled");
+    }
+    let raw = crate::agent_fill::generate_scoped_token(crate::agent_fill::ScopedCredentialKind::Agent);
+    let saved = AgentToken::create(
+        user.uuid,
+        name,
+        crate::agent_fill::token_hash(&raw),
+        crate::agent_fill::token_prefix_label(&raw),
+        &conn,
+    )
+    .await?;
+    AgentTokenFolder::replace(&saved.uuid, &folders, &conn).await?;
+    Ok(Json(json!({
+        "object": "agentToken",
+        "id": saved.uuid,
+        "tokenPrefix": saved.token_prefix,
+        "token": raw,
+    })))
+}
+
+#[post("/agent/tokens/<token_id>/revoke", format = "application/json")]
+async fn revoke_agent_token(token_id: AgentTokenId, _token: AdminToken, conn: DbConn) -> EmptyResult {
+    let Some(token) = AgentToken::find_by_uuid(&token_id, &conn).await else {
+        err_code!("Token not found", Status::NotFound.code);
+    };
+    token.revoke(&conn).await
+}
+
+#[post("/agent/fill-agents", format = "application/json", data = "<body>")]
+async fn create_fill_agent(body: Json<CreateFillAgentBody>, _token: AdminToken, conn: DbConn) -> JsonResult {
+    let name = clean_agent_name(&body.name)?;
+    let user = agent_user_by_email(&body.user_email, &conn).await?;
+    let raw = crate::agent_fill::generate_scoped_token(crate::agent_fill::ScopedCredentialKind::FillAgent);
+    let saved = FillAgent::create(
+        user.uuid,
+        name,
+        crate::agent_fill::token_hash(&raw),
+        crate::agent_fill::token_prefix_label(&raw),
+        &conn,
+    )
+    .await?;
+    Ok(Json(json!({
+        "object": "fillAgent",
+        "id": saved.uuid,
+        "tokenPrefix": saved.token_prefix,
+        "token": raw,
+    })))
+}
+
+#[post("/agent/fill-agents/<fill_agent_id>/revoke", format = "application/json")]
+async fn revoke_fill_agent(fill_agent_id: FillAgentId, _token: AdminToken, conn: DbConn) -> EmptyResult {
+    let Some(agent) = FillAgent::find_by_uuid(&fill_agent_id, &conn).await else {
+        err_code!("Fill agent not found", Status::NotFound.code);
+    };
+    agent.revoke(&conn).await
 }
 
 #[cfg(test)]

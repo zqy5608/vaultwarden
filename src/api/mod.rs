@@ -1,4 +1,5 @@
 mod admin;
+mod agent;
 pub mod core;
 mod icons;
 mod identity;
@@ -12,6 +13,7 @@ use serde_json::Value;
 pub use crate::api::{
     admin::catchers as admin_catchers,
     admin::routes as admin_routes,
+    agent::routes as agent_routes,
     core::catchers as core_catchers,
     core::purge_auth_requests,
     core::purge_sends,

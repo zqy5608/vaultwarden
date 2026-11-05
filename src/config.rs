@@ -678,6 +678,24 @@ make_config! {
         events_days_retain:     u16,    false,   option;
     },
 
+    /// Agent API
+    agent {
+        /// Enable Agent API |> When false, every /api/agent route returns "Agent API is disabled".
+        agent_api_enabled:          bool,   true,   def,    false;
+        /// Require folder allowlist |> When true, an agent token with no folder ACL cannot see or fill items.
+        agent_require_folder_acl:   bool,   true,   def,    true;
+        /// Reveal usernames to agents |> Include plaintext usernames in agent metadata. Ciphertext usernames and passwords are never returned.
+        agent_reveal_usernames:     bool,   true,   def,    false;
+        /// Allow IP-literal origins |> When false, fill tickets whose host is an IP address are denied.
+        agent_allow_ip_origins:     bool,   true,   def,    false;
+        /// Allow regex URI match |> Bitwarden match type 4. Off because a broad pattern can authorize the wrong host.
+        agent_allow_regex_uri_match: bool,  true,   def,    false;
+        /// Include TOTP in fill payload |> Returned only to the registered fill agent on redeem, never to the AI token.
+        agent_fill_include_totp:    bool,   true,   def,    true;
+        /// Fill ticket lifetime (seconds) |> Single-use ticket TTL. Must be between 10 and 300.
+        agent_fill_ticket_ttl_secs: u32,    true,   def,    60;
+    },
+
     client {
         /// Control whether clients onboarding interstitials are suppressed |> post-login welcome dialogs, extension install prompts, setup extension redirects, and premium upsell modals
         client_suppress_onboarding:         bool, true,   def,    false;
@@ -1041,6 +1059,10 @@ fn validate_config(cfg: &ConfigItems, on_update: bool) -> Result<(), Error> {
         err!(
             "`FILL_ASSIST_RULES_URL` must be a valid HTTPS URL without credentials, query parameters, fragments, or surrounding whitespace."
         );
+    }
+
+    if !(10..=300).contains(&cfg.agent_fill_ticket_ttl_secs) {
+        err!("`AGENT_FILL_TICKET_TTL_SECS` must be between 10 and 300");
     }
 
     let connect_src = cfg.allowed_connect_src.to_lowercase();
@@ -1856,6 +1878,7 @@ where
     reg!("admin/users");
     reg!("admin/organizations");
     reg!("admin/diagnostics");
+    reg!("admin/agents");
 
     reg!("404");
 

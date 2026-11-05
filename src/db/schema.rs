@@ -353,6 +353,78 @@ table! {
     }
 }
 
+table! {
+    agent_tokens (uuid) {
+        uuid -> Text,
+        user_uuid -> Text,
+        name -> Text,
+        token_hash -> Text,
+        token_prefix -> Text,
+        created_at -> Timestamp,
+        revoked_at -> Nullable<Timestamp>,
+        last_used_at -> Nullable<Timestamp>,
+    }
+}
+
+table! {
+    agent_token_folders (agent_token_uuid, folder_uuid) {
+        agent_token_uuid -> Text,
+        folder_uuid -> Text,
+    }
+}
+
+table! {
+    fill_agents (uuid) {
+        uuid -> Text,
+        user_uuid -> Text,
+        name -> Text,
+        token_hash -> Text,
+        token_prefix -> Text,
+        created_at -> Timestamp,
+        revoked_at -> Nullable<Timestamp>,
+        last_used_at -> Nullable<Timestamp>,
+    }
+}
+
+table! {
+    agent_cipher_uris (uuid) {
+        uuid -> Text,
+        cipher_uuid -> Text,
+        uri -> Text,
+        match_type -> Nullable<Integer>,
+    }
+}
+
+table! {
+    fill_tickets (uuid) {
+        uuid -> Text,
+        redeem_secret -> Text,
+        agent_token_uuid -> Text,
+        fill_agent_uuid -> Text,
+        user_uuid -> Text,
+        cipher_uuid -> Text,
+        origin -> Text,
+        created_at -> Timestamp,
+        expires_at -> Timestamp,
+        redeemed_at -> Nullable<Timestamp>,
+    }
+}
+
+table! {
+    agent_audit_log (uuid) {
+        uuid -> Text,
+        created_at -> Timestamp,
+        user_uuid -> Text,
+        agent_token_uuid -> Nullable<Text>,
+        fill_agent_uuid -> Nullable<Text>,
+        cipher_uuid -> Nullable<Text>,
+        action -> Text,
+        origin -> Nullable<Text>,
+        detail -> Text,
+        ip_address -> Nullable<Text>,
+    }
+}
+
 joinable!(archives -> users (user_uuid));
 joinable!(archives -> ciphers (cipher_uuid));
 joinable!(attachments -> ciphers (cipher_uuid));

@@ -200,6 +200,9 @@ impl<'r> FromRequest<'r> for PublicToken {
         } else {
             err_handler!("No access token provided")
         };
+        if crate::agent_fill::is_scoped_agent_credential(access_token) {
+            err_handler!("Invalid claim")
+        }
         // Check JWT token is valid and get device and user from it
         let Ok(claims) = auth::decode_api_org(access_token) else {
             err_handler!("Invalid claim")

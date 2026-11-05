@@ -686,6 +686,11 @@ impl<'r> FromRequest<'r> for Headers {
             err_handler!("No access token provided")
         };
 
+        // Scoped agent credentials are not user sessions and must not reach cipher sync.
+        if crate::agent_fill::is_scoped_agent_credential(access_token) {
+            err_handler!("Invalid claim")
+        }
+
         // Check JWT token is valid and get device and user from it
         let Ok(claims) = decode_login(access_token) else {
             err_handler!("Invalid claim")

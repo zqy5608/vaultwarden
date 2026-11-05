@@ -72,6 +72,36 @@ function _delete(url, successMsg, errMsg, body, reload_page = true) {
     return _fetch("DELETE", url, successMsg, errMsg, body, reload_page);
 }
 
+function createScopedCredential(url, body) {
+    fetch(url, {
+        method: "POST",
+        body: JSON.stringify(body),
+        mode: "same-origin",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" }
+    }).then(async (resp) => {
+        const text = await resp.text();
+        let data = {};
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            data = {};
+        }
+        if (!resp.ok) {
+            msg(data.message || text || "Request failed", false);
+            return;
+        }
+        const panel = document.getElementById("agent-secret-panel");
+        const value = document.getElementById("agent-secret-value");
+        if (panel && value) {
+            value.textContent = data.token || "";
+            panel.hidden = false;
+        }
+    }).catch(() => {
+        msg("Request failed", false);
+    });
+}
+
 // Bootstrap Theme Selector
 const getStoredTheme = () => localStorage.getItem("theme");
 const setStoredTheme = theme => localStorage.setItem("theme", theme);
@@ -153,6 +183,47 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
                 showActiveTheme(theme, true);
             });
         });
+
+    const agentTokenForm = document.getElementById("agent-token-form");
+    const fillAgentForm = document.getElementById("fill-agent-form");
+    if (agentTokenForm) {
+        agentTokenForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            const folderIds = document.getElementById("agent-folder-ids").value
+                .split(",")
+                .map((value) => value.trim())
+                .filter(Boolean);
+            createScopedCredential(`${BASE_URL}/admin/agent/tokens`, {
+                userEmail: document.getElementById("agent-user-email").value,
+                name: document.getElementById("agent-token-name").value,
+                folderIds,
+            });
+        });
+    }
+    if (fillAgentForm) {
+        fillAgentForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            createScopedCredential(`${BASE_URL}/admin/agent/fill-agents`, {
+                userEmail: document.getElementById("fill-agent-email").value,
+                name: document.getElementById("fill-agent-name").value,
+            });
+        });
+    }
+    const secretDone = document.getElementById("agent-secret-done");
+    if (secretDone) {
+        secretDone.addEventListener("click", reload);
+    }
+    document.querySelectorAll("[data-agent-revoke]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const kind = button.getAttribute("data-agent-revoke");
+            const id = button.getAttribute("data-agent-id");
+            if (!id || !confirm("Revoke this credential?")) {
+                return;
+            }
+            const path = kind === "fill" ? "fill-agents" : "tokens";
+            _post(`${BASE_URL}/admin/agent/${path}/${id}/revoke`, "Credential revoked", "Revoke failed", "{}");
+        });
+    });
 
     // get current URL path and assign "active" class to the correct nav-item
     const pathname = window.location.pathname;

@@ -144,6 +144,9 @@ fn websockets_hub<'r>(
         err_code!("Invalid claim", 401)
     };
 
+    if crate::agent_fill::is_scoped_agent_credential(&token) {
+        err_code!("Invalid token", 401)
+    }
     let Ok(claims) = crate::auth::decode_login(&token) else {
         err_code!("Invalid token", 401)
     };
