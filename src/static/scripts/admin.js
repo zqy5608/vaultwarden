@@ -77,6 +77,64 @@ let agentFoldersLoadedFor = "";
 let agentFoldersDisplayedFor = "";
 let agentFolderPending = null;
 let agentFolderPendingEmail = "";
+let agentFolderLoadTimer = 0;
+const AGENT_FOLDER_LOAD_DELAY_MS = 300;
+
+function agentEmailLooksUsable(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function agentFolderEmailStillCurrent(normalized) {
+    const field = document.getElementById("agent-user-email");
+    return field !== null && field.value.trim().toLowerCase() === normalized;
+}
+
+// Bump the request counter so an in-flight lookup cannot paint folders for a previous email.
+function dropStaleAgentFolderRequest(normalized) {
+    if (agentFolderPendingEmail && agentFolderPendingEmail !== normalized) {
+        agentFolderRequest += 1;
+        agentFolderPending = null;
+        agentFolderPendingEmail = "";
+    }
+    if (agentFoldersDisplayedFor === normalized && normalized !== "") {
+        agentFoldersLoadedFor = normalized;
+        return;
+    }
+    agentFoldersLoadedFor = "";
+}
+
+function scheduleAgentFolderLoad(email, delay) {
+    if (agentFolderLoadTimer) {
+        clearTimeout(agentFolderLoadTimer);
+        agentFolderLoadTimer = 0;
+    }
+    const normalized = email.trim().toLowerCase();
+    dropStaleAgentFolderRequest(normalized);
+    if (!agentEmailLooksUsable(email)) {
+        setAgentFolderStatus("");
+        setAgentFolderMessage("Enter a user email to load folders.");
+        return;
+    }
+    if (agentFoldersLoadedFor === normalized || agentFolderPendingEmail === normalized) {
+        return;
+    }
+    if (agentFoldersDisplayedFor && agentFoldersDisplayedFor !== normalized) {
+        setAgentFolderStatus("");
+        setAgentFolderMessage("Loading folders…");
+    }
+    const startLoad = () => {
+        agentFolderLoadTimer = 0;
+        if (!agentFolderEmailStillCurrent(normalized)) {
+            return;
+        }
+        loadAgentFolders(document.getElementById("agent-user-email").value);
+    };
+    if (delay <= 0) {
+        startLoad();
+        return;
+    }
+    agentFolderLoadTimer = setTimeout(startLoad, delay);
+}
 
 function setAgentFolderStatus(text) {
     const status = document.getElementById("agent-folder-status");
@@ -147,6 +205,9 @@ function loadAgentFolders(email) {
             return false;
         }
         const text = await resp.text();
+        if (request !== agentFolderRequest || !agentFolderEmailStillCurrent(normalized)) {
+            return false;
+        }
         let data = {};
         try {
             data = JSON.parse(text);
@@ -196,7 +257,7 @@ function loadAgentFolders(email) {
         agentFoldersDisplayedFor = normalized;
         return true;
     }).catch(() => {
-        if (request !== agentFolderRequest) {
+        if (request !== agentFolderRequest || !agentFolderEmailStillCurrent(normalized)) {
             return false;
         }
         setAgentFolderMessage("Could not load folders.");
@@ -330,11 +391,13 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
     const agentUserEmail = document.getElementById("agent-user-email");
     if (agentUserEmail) {
         agentUserEmail.addEventListener("input", () => {
-            const normalized = agentUserEmail.value.trim().toLowerCase();
-            agentFoldersLoadedFor = normalized === agentFoldersDisplayedFor ? agentFoldersDisplayedFor : "";
+            scheduleAgentFolderLoad(agentUserEmail.value, AGENT_FOLDER_LOAD_DELAY_MS);
         });
         agentUserEmail.addEventListener("change", () => {
-            loadAgentFolders(agentUserEmail.value);
+            scheduleAgentFolderLoad(agentUserEmail.value, 0);
+        });
+        agentUserEmail.addEventListener("blur", () => {
+            scheduleAgentFolderLoad(agentUserEmail.value, 0);
         });
     }
     const folderAll = document.getElementById("agent-folder-all");
@@ -356,6 +419,10 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
     if (agentTokenForm) {
         agentTokenForm.addEventListener("submit", (event) => {
             event.preventDefault();
+            if (agentFolderLoadTimer) {
+                clearTimeout(agentFolderLoadTimer);
+                agentFolderLoadTimer = 0;
+            }
             const email = document.getElementById("agent-user-email").value.trim();
             const normalized = email.toLowerCase();
             const createToken = () => {
@@ -373,14 +440,14 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
                     folderIds,
                 });
             };
-            // Show the folder names before storing an allowlist, including an empty one.
+            // One submit creates the token. Load folders first when the lookup has not finished.
             if (agentFoldersLoadedFor === normalized && normalized !== "") {
                 createToken();
                 return;
             }
             loadAgentFolders(email).then((ok) => {
                 if (ok && agentFoldersLoadedFor === normalized) {
-                    setAgentFolderStatus("Folders loaded. Review the selection, then create the token.");
+                    createToken();
                 }
             });
         });
