@@ -14,6 +14,7 @@ use serde_json::Value;
 
 use crate::{
     CONFIG, VERSION,
+    agent_fill::folder_picker_label,
     api::{
         ApiResult, EmptyResult, JsonResult, Notify,
         core::{log_event, two_factor},
@@ -73,6 +74,7 @@ pub fn routes() -> Vec<Route> {
         resend_user_invite,
         get_diagnostics_http,
         agents_overview,
+        agent_user_folders,
         create_agent_token,
         revoke_agent_token,
         create_fill_agent,
@@ -958,13 +960,28 @@ async fn agents_overview(_token: AdminToken, conn: DbConn) -> ApiResult<Html<Str
     let mut tokens = Vec::new();
     for token in AgentToken::list_all(&conn).await {
         let email = User::find_by_uuid(&token.user_uuid, &conn).await.map(|user| user.email).unwrap_or_default();
-        let folders = AgentTokenFolder::folders_for_token(&token.uuid, &conn).await;
+        let folder_ids = AgentTokenFolder::folders_for_token(&token.uuid, &conn).await;
+        let stored = Folder::find_by_user(&token.user_uuid, &conn).await;
+        let folders = folder_ids
+            .iter()
+            .map(|folder_id| {
+                let id = folder_id.as_ref().to_owned();
+                let name =
+                    stored.iter().find(|folder| &folder.uuid == folder_id).map_or("", |folder| folder.name.as_str());
+                json!({
+                    "id": id,
+                    "label": folder_picker_label(name, &id),
+                })
+            })
+            .collect::<Vec<_>>();
+        let unrestricted = folders.is_empty() && !CONFIG.agent_require_folder_acl();
         tokens.push(json!({
             "id": token.uuid,
             "email": email,
             "name": token.name,
             "tokenPrefix": token.token_prefix,
-            "folderIds": folders,
+            "folders": folders,
+            "unrestricted": unrestricted,
             "createdAt": format_naive_datetime_local(&token.created_at, DT_FMT),
             "revoked": token.revoked_at.is_some(),
         }));
@@ -1005,6 +1022,46 @@ async fn agents_overview(_token: AdminToken, conn: DbConn) -> ApiResult<Html<Str
     Ok(Html(text))
 }
 
+#[get("/agent/users/folders?<email>")]
+async fn agent_user_folders(email: Option<String>, _token: AdminToken, conn: DbConn) -> JsonResult {
+    let Some(email) = email.as_deref().map(str::trim).filter(|email| !email.is_empty()) else {
+        err!("User email is required");
+    };
+    let user = agent_user_by_email(email, &conn).await?;
+    let mut folders = Folder::find_by_user(&user.uuid, &conn).await;
+    folders.sort_by(|left, right| {
+        let left_label = folder_picker_label(&left.name, left.uuid.as_ref());
+        let right_label = folder_picker_label(&right.name, right.uuid.as_ref());
+        left_label
+            .to_lowercase()
+            .cmp(&right_label.to_lowercase())
+            .then_with(|| left.uuid.as_ref().cmp(right.uuid.as_ref()))
+    });
+    let folders = folders
+        .iter()
+        .map(|folder| {
+            let id = folder.uuid.as_ref().to_owned();
+            json!({
+                "id": id,
+                "name": folder.name,
+                "label": folder_picker_label(&folder.name, &id),
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok(Json(json!({
+        "object": "agentFolderList",
+        "email": user.email,
+        "folders": folders,
+    })))
+}
+
+fn ensure_agent_folder_allowlist(require_folder_acl: bool, folder_count: usize) -> EmptyResult {
+    if require_folder_acl && folder_count == 0 {
+        err!("A folder allowlist is required while AGENT_REQUIRE_FOLDER_ACL is enabled");
+    }
+    Ok(())
+}
+
 #[post("/agent/tokens", format = "application/json", data = "<body>")]
 async fn create_agent_token(body: Json<CreateAgentTokenBody>, _token: AdminToken, conn: DbConn) -> JsonResult {
     let name = clean_agent_name(&body.name)?;
@@ -1026,9 +1083,7 @@ async fn create_agent_token(body: Json<CreateAgentTokenBody>, _token: AdminToken
             folders.push(folder_id);
         }
     }
-    if CONFIG.agent_require_folder_acl() && folders.is_empty() {
-        err!("A folder allowlist is required while AGENT_REQUIRE_FOLDER_ACL is enabled");
-    }
+    ensure_agent_folder_allowlist(CONFIG.agent_require_folder_acl(), folders.len())?;
     let raw = crate::agent_fill::generate_scoped_token(crate::agent_fill::ScopedCredentialKind::Agent);
     let saved = AgentToken::create(
         user.uuid,
@@ -1087,6 +1142,85 @@ async fn revoke_fill_agent(fill_agent_id: FillAgentId, _token: AdminToken, conn:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn empty_folder_create_succeeds_when_acl_is_off() {
+        assert!(ensure_agent_folder_allowlist(false, 0).is_ok());
+        assert!(ensure_agent_folder_allowlist(false, 2).is_ok());
+        assert!(ensure_agent_folder_allowlist(true, 1).is_ok());
+        let err = ensure_agent_folder_allowlist(true, 0).unwrap_err();
+        assert_eq!(err.message(), "A folder allowlist is required while AGENT_REQUIRE_FOLDER_ACL is enabled");
+    }
+
+    #[test]
+    fn agents_template_renders_folder_picker() {
+        let mut hb = handlebars::Handlebars::new();
+        hb.set_strict_mode(true);
+        hb.register_template_string("agents", include_str!("../static/templates/admin/agents.hbs")).unwrap();
+        let render = |require_folder_acl: bool| {
+            hb.render(
+                "agents",
+                &json!({
+                    "page_data": {
+                        "enabled": true,
+                        "requireFolderAcl": require_folder_acl,
+                        "tokens": [
+                            {
+                                "id": "token-id",
+                                "email": "user@example.com",
+                                "name": "reader",
+                                "tokenPrefix": "vwagent_abcd",
+                                "folders": [{ "id": "folder-id", "label": "Work" }],
+                                "unrestricted": false,
+                                "createdAt": "2026-01-01",
+                                "revoked": false,
+                            },
+                            {
+                                "id": "open-token",
+                                "email": "user@example.com",
+                                "name": "open",
+                                "tokenPrefix": "vwagent_efgh",
+                                "folders": [],
+                                "unrestricted": !require_folder_acl,
+                                "createdAt": "2026-01-01",
+                                "revoked": true,
+                            },
+                        ],
+                        "fillAgents": [{
+                            "id": "fill-id",
+                            "email": "user@example.com",
+                            "name": "filler",
+                            "tokenPrefix": "vwfill_abcd",
+                            "createdAt": "2026-01-01",
+                            "revoked": false,
+                        }],
+                        "audit": [{
+                            "createdAt": "2026-01-01",
+                            "action": "match",
+                            "detail": "listed",
+                            "origin": "https://example.com",
+                            "ip": "127.0.0.1",
+                        }],
+                    }
+                }),
+            )
+            .unwrap_or_else(|err| panic!("agents template failed to render: {err}"))
+        };
+
+        let acl_off = render(false);
+        assert!(acl_off.contains("id=\"agent-folder-list\""));
+        assert!(acl_off.contains("data-require-folder-acl=\"false\""));
+        assert!(acl_off.contains("Leave every folder unchecked"));
+        assert!(acl_off.contains(">Work</div>"));
+        assert!(acl_off.contains("All eligible logins"));
+        assert!(!acl_off.contains("agent-folder-ids"));
+        assert!(acl_off.contains("id=\"fill-agent-form\""));
+
+        let acl_on = render(true);
+        assert!(acl_on.contains("data-require-folder-acl=\"true\""));
+        assert!(acl_on.contains("Select at least one folder"));
+        assert!(acl_on.contains(">None</span>"));
+    }
 
     #[test]
     fn validate_web_vault_compare() {

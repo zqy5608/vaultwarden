@@ -32,7 +32,9 @@ It does not return passwords, TOTP, cipher keys, notes, custom fields, cards, id
 
 Only personal login items are visible. Organization items are not part of this API.
 
-When `AGENT_REQUIRE_FOLDER_ACL=true` (the default), a token with no folder allowlist sees nothing. Folder UUIDs are set when the token is created.
+When `AGENT_REQUIRE_FOLDER_ACL=false` (the default), a token created with no folder allowlist can see that user's eligible personal login items. Set it to `true` to require at least one folder when the token is created; an empty allowlist then sees nothing. A token that has a folder allowlist only sees logins in those folders, whether or not the setting is on.
+
+On `/admin/agents`, enter the user email and the page loads that user's folders. Check the folders to store their ids with the token. Plaintext folder names are shown as labels. Encrypted names are labeled so they can be selected without typing ids. Fill agents do not use a folder allowlist.
 
 ## URI index
 
@@ -86,7 +88,7 @@ Match, ticket create, redeem, deny, and URI-index updates are written to `agent_
 | Variable | Default |
 | --- | --- |
 | `AGENT_API_ENABLED` | `false` |
-| `AGENT_REQUIRE_FOLDER_ACL` | `true` |
+| `AGENT_REQUIRE_FOLDER_ACL` | `false` |
 | `AGENT_REVEAL_USERNAMES` | `false` |
 | `AGENT_ALLOW_IP_ORIGINS` | `false` |
 | `AGENT_ALLOW_REGEX_URI_MATCH` | `false` |

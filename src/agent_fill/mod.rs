@@ -10,8 +10,8 @@ mod uri;
 
 pub use policy::{
     AgentItemInput, FillPayloadInput, MAX_LIST, RedeemFacts, agent_can_fill, agent_can_see_item, evaluate_redeem,
-    fill_agent_ticket_json, fill_payload_json, item_list_json, metadata_json, plaintext_username, query_matches,
-    ticket_created_json, ticket_status, ticket_status_json,
+    fill_agent_ticket_json, fill_payload_json, folder_picker_label, item_list_json, metadata_json, plaintext_username,
+    query_matches, ticket_created_json, ticket_status, ticket_status_json,
 };
 pub use token::{
     ScopedCredentialKind, agent_api_gate, generate_scoped_token, is_scoped_agent_credential, scoped_credential_kind,

@@ -682,8 +682,9 @@ make_config! {
     agent {
         /// Enable Agent API |> When false, every /api/agent route returns "Agent API is disabled".
         agent_api_enabled:          bool,   true,   def,    false;
-        /// Require folder allowlist |> When true, an agent token with no folder ACL cannot see or fill items.
-        agent_require_folder_acl:   bool,   true,   def,    true;
+        /// Require folder allowlist |> When enabled, creating an agent token requires at least one folder, and a token with no folders cannot see or fill items.
+        /// When disabled (the default), a token with no folders can see that user's eligible personal login items. A non-empty allowlist always limits the token to those folders.
+        agent_require_folder_acl:   bool,   true,   def,    false;
         /// Reveal usernames to agents |> Include plaintext usernames in agent metadata. Ciphertext usernames and passwords are never returned.
         agent_reveal_usernames:     bool,   true,   def,    false;
         /// Allow IP-literal origins |> When false, fill tickets whose host is an IP address are denied.
@@ -1966,3 +1967,14 @@ handlebars::handlebars_helper!(webver: | web_vault_version: String |
 handlebars::handlebars_helper!(vwver: | vw_version: String |
     semver::VersionReq::parse(&vw_version).expect("Invalid Vaultwarden version compare string").matches(&VW_VERSION)
 );
+
+#[cfg(test)]
+mod tests {
+    use super::ConfigBuilder;
+
+    #[test]
+    fn agent_require_folder_acl_defaults_to_false() {
+        let items = ConfigBuilder::default().build();
+        assert!(!items.agent_require_folder_acl);
+    }
+}

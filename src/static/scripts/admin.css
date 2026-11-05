@@ -86,3 +86,8 @@ img {
     display: block;
     overflow: visible;
 }
+
+#agent-folder-list {
+    max-height: 12rem;
+    overflow: auto;
+}
