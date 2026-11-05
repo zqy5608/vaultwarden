@@ -84,6 +84,15 @@ function agentEmailLooksUsable(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+// Missing controls must not throw. A stale page used to read .value of a removed node and the click died.
+function agentFieldValue(id) {
+    const field = document.getElementById(id);
+    if (!field || typeof field.value !== "string") {
+        return null;
+    }
+    return field.value;
+}
+
 function agentFolderEmailStillCurrent(normalized) {
     const field = document.getElementById("agent-user-email");
     return field !== null && field.value.trim().toLowerCase() === normalized;
@@ -127,7 +136,11 @@ function scheduleAgentFolderLoad(email, delay) {
         if (!agentFolderEmailStillCurrent(normalized)) {
             return;
         }
-        loadAgentFolders(document.getElementById("agent-user-email").value);
+        const emailValue = agentFieldValue("agent-user-email");
+        if (emailValue === null) {
+            return;
+        }
+        loadAgentFolders(emailValue);
     };
     if (delay <= 0) {
         startLoad();
@@ -158,6 +171,47 @@ function setAgentFolderMessage(text) {
     note.className = "text-body-secondary";
     note.textContent = text;
     list.appendChild(note);
+}
+
+function agentJsonBody(text) {
+    try {
+        const data = JSON.parse(text);
+        if (data && typeof data === "object") {
+            return data;
+        }
+    } catch (e) {
+        return null;
+    }
+    return null;
+}
+
+function agentServerMessage(data) {
+    if (!data) {
+        return "";
+    }
+    if (typeof data.message === "string" && data.message.trim()) {
+        return data.message.trim();
+    }
+    if (data.errorModel && typeof data.errorModel.message === "string" && data.errorModel.message.trim()) {
+        return data.errorModel.message.trim();
+    }
+    return "";
+}
+
+function agentFailureMessage(resp, data, fallback) {
+    const server = agentServerMessage(data);
+    if (server) {
+        return server;
+    }
+    const status = resp && resp.status ? String(resp.status) : "";
+    const statusText = resp && resp.statusText ? String(resp.statusText) : "";
+    const label = [status, statusText].filter(Boolean).join(" ");
+    return label ? `${fallback} (${label})` : fallback;
+}
+
+function reportAgentFolderFailure(message) {
+    setAgentFolderMessage(message);
+    msg(message, false);
 }
 
 function agentFolderChoices(folders) {
@@ -208,17 +262,12 @@ function loadAgentFolders(email) {
         if (request !== agentFolderRequest || !agentFolderEmailStillCurrent(normalized)) {
             return false;
         }
-        let data = {};
-        try {
-            data = JSON.parse(text);
-        } catch (e) {
-            data = {};
-        }
-        if (!resp.ok) {
-            setAgentFolderMessage(data.message || "Could not load folders.");
+        const data = agentJsonBody(text);
+        if (!resp.ok || !data || !Array.isArray(data.folders)) {
+            reportAgentFolderFailure(agentFailureMessage(resp, data, "Could not load folders"));
             return false;
         }
-        const folders = agentFolderChoices(Array.isArray(data.folders) ? data.folders : []);
+        const folders = agentFolderChoices(data.folders);
         list.replaceChildren();
         if (folders.length === 0) {
             if (actions) {
@@ -260,7 +309,7 @@ function loadAgentFolders(email) {
         if (request !== agentFolderRequest || !agentFolderEmailStillCurrent(normalized)) {
             return false;
         }
-        setAgentFolderMessage("Could not load folders.");
+        reportAgentFolderFailure("Could not load folders.");
         return false;
     });
     agentFolderPending = pending;
@@ -274,6 +323,30 @@ function loadAgentFolders(email) {
     return pending;
 }
 
+function revealAgentSecret(token) {
+    const panel = document.getElementById("agent-secret-panel");
+    const value = document.getElementById("agent-secret-value");
+    if (!panel || !value) {
+        return;
+    }
+    value.textContent = token;
+    panel.hidden = false;
+    const show = () => {
+        try {
+            if (typeof panel.scrollIntoView === "function") {
+                panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+        } catch (e) {
+            // The credential is already visible when the browser cannot scroll.
+        }
+    };
+    if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(show);
+    } else {
+        show();
+    }
+}
+
 function createScopedCredential(url, body) {
     fetch(url, {
         method: "POST",
@@ -283,22 +356,12 @@ function createScopedCredential(url, body) {
         headers: { "Content-Type": "application/json" }
     }).then(async (resp) => {
         const text = await resp.text();
-        let data = {};
-        try {
-            data = JSON.parse(text);
-        } catch (e) {
-            data = {};
-        }
-        if (!resp.ok) {
-            msg(data.message || text || "Request failed", false);
+        const data = agentJsonBody(text);
+        if (!resp.ok || !data || typeof data.token !== "string") {
+            msg(agentFailureMessage(resp, data, "Request failed"), false);
             return;
         }
-        const panel = document.getElementById("agent-secret-panel");
-        const value = document.getElementById("agent-secret-value");
-        if (panel && value) {
-            value.textContent = data.token || "";
-            panel.hidden = false;
-        }
+        revealAgentSecret(data.token);
     }).catch(() => {
         msg("Request failed", false);
     });
@@ -423,41 +486,62 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
                 clearTimeout(agentFolderLoadTimer);
                 agentFolderLoadTimer = 0;
             }
-            const email = document.getElementById("agent-user-email").value.trim();
+            const emailValue = agentFieldValue("agent-user-email");
+            const nameValue = agentFieldValue("agent-token-name");
+            if (emailValue === null || nameValue === null) {
+                msg("Could not read this form. Reload the page and try again.", false);
+                return;
+            }
+            const email = emailValue.trim();
             const normalized = email.toLowerCase();
-            const createToken = () => {
-                const requireAcl = agentTokenForm.dataset.requireFolderAcl === "true";
-                const folderIds = [...document.querySelectorAll("#agent-folder-list input[type=checkbox]:checked")]
-                    .map((input) => input.value);
-                if (requireAcl && folderIds.length === 0) {
-                    msg("Select at least one folder. A folder allowlist is required.", false);
-                    return;
-                }
+            const requireAcl = agentTokenForm.dataset.requireFolderAcl === "true";
+            const selectedFolderIds = () => [...document.querySelectorAll("#agent-folder-list input[type=checkbox]:checked")]
+                .map((input) => input.value);
+            const createToken = (folderIds) => {
                 setAgentFolderStatus("");
                 createScopedCredential(`${BASE_URL}/admin/agent/tokens`, {
                     userEmail: email,
-                    name: document.getElementById("agent-token-name").value,
+                    name: nameValue,
                     folderIds,
                 });
             };
-            // One submit creates the token. Load folders first when the lookup has not finished.
+            // Folder lookup is optional unless an allowlist is required. A failed lookup must not swallow Create.
+            if (!requireAcl) {
+                createToken(selectedFolderIds());
+                return;
+            }
+            const createIfAllowed = () => {
+                const folderIds = selectedFolderIds();
+                if (agentFoldersLoadedFor !== normalized || folderIds.length === 0) {
+                    msg("Select at least one folder. A folder allowlist is required.", false);
+                    return;
+                }
+                createToken(folderIds);
+            };
             if (agentFoldersLoadedFor === normalized && normalized !== "") {
-                createToken();
+                createIfAllowed();
                 return;
             }
             loadAgentFolders(email).then((ok) => {
-                if (ok && agentFoldersLoadedFor === normalized) {
-                    createToken();
+                if (!ok || agentFoldersLoadedFor !== normalized) {
+                    return;
                 }
+                createIfAllowed();
             });
         });
     }
     if (fillAgentForm) {
         fillAgentForm.addEventListener("submit", (event) => {
             event.preventDefault();
+            const userEmail = agentFieldValue("fill-agent-email");
+            const name = agentFieldValue("fill-agent-name");
+            if (userEmail === null || name === null) {
+                msg("Could not read this form. Reload the page and try again.", false);
+                return;
+            }
             createScopedCredential(`${BASE_URL}/admin/agent/fill-agents`, {
-                userEmail: document.getElementById("fill-agent-email").value,
-                name: document.getElementById("fill-agent-name").value,
+                userEmail,
+                name,
             });
         });
     }
