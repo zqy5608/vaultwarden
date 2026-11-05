@@ -100,6 +100,7 @@ impl Folder {
 
     pub async fn delete(&self, conn: &DbConn) -> EmptyResult {
         User::update_uuid_revision(&self.user_uuid, conn).await;
+        super::agent::delete_folder_acl(&self.uuid, conn).await?;
         FolderCipher::delete_all_by_folder(&self.uuid, conn).await?;
 
         conn.run(move |conn| {

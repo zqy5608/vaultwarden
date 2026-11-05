@@ -135,6 +135,9 @@ impl<'r> FromRequest<'r> for SendHeaders {
             err_handler!("No access token provided")
         };
 
+        if crate::agent_fill::is_scoped_agent_credential(access_token) {
+            err_handler!("Invalid claim")
+        }
         // Check JWT token is valid and get send_id
         let Ok(claims) = auth::decode_send(access_token) else {
             err_handler!("Invalid claim")

@@ -49,6 +49,7 @@ use rocket::data::{Limits, ToByteUnit};
 
 #[macro_use]
 mod error;
+mod agent_fill;
 mod api;
 mod auth;
 mod config;
@@ -582,6 +583,7 @@ async fn launch_rocket(pool: db::DbPool, extra_debug: bool) -> Result<(), Error>
     let instance = rocket::custom(config)
         .mount([basepath, "/"].concat(), api::web_routes())
         .mount([basepath, "/api"].concat(), api::core_routes())
+        .mount([basepath, "/api"].concat(), api::agent_routes())
         .mount([basepath, "/admin"].concat(), api::admin_routes())
         .mount([basepath, "/events"].concat(), api::core_events_routes())
         .mount([basepath, "/identity"].concat(), api::identity_routes())

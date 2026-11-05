@@ -1,3 +1,4 @@
+mod agent;
 mod archive;
 mod attachment;
 mod auth_request;
@@ -18,6 +19,10 @@ mod two_factor_duo_context;
 mod two_factor_incomplete;
 mod user;
 
+pub use self::agent::{
+    AgentAudit, AgentCipherUri, AgentToken, AgentTokenFolder, AgentTokenId, FillAgent, FillAgentId, FillTicket,
+    FillTicketId, find_personal_login, find_personal_logins,
+};
 pub use self::archive::Archive;
 pub use self::attachment::{Attachment, AttachmentId};
 pub use self::auth_request::{AuthRequest, AuthRequestId};

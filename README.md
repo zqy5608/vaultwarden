@@ -53,6 +53,13 @@ A nearly complete implementation of the Bitwarden Client API is provided, includ
  * [Emergency Access](https://bitwarden.com/help/emergency-access/)
  * [Vaultwarden Admin Backend](https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page)
  * [Modified Web Vault client](https://github.com/dani-garcia/bw_web_builds) (Bundled within our containers)
+ * [Fill-only Agent API](docs/agent-api.md) for untrusted AI clients (disabled by default, fork-specific)
+
+<br>
+
+### Agent API
+
+This fork adds a separate `/api/agent` surface so an AI client can match logins and request a one-time fill without receiving passwords, TOTP seeds, keys, or secure-note bodies. A registered fill agent redeems the ticket and is the only caller that receives login material. Official Bitwarden client routes are unchanged. Set `AGENT_API_ENABLED=false` (the default) to keep the API off. See [docs/agent-api.md](docs/agent-api.md).
 
 <br>
 

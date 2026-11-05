@@ -438,8 +438,11 @@ impl Cipher {
     pub async fn save(&mut self, conn: &DbConn) -> EmptyResult {
         self.update_users_revision(conn).await;
         self.updated_at = Utc::now().naive_utc();
+        let cipher_uuid = self.uuid.clone();
+        let cipher_type = self.atype;
+        let cipher_data = self.data.clone();
 
-        db_run! { conn:
+        let saved = db_run! { conn:
             mysql {
                 diesel::insert_into(ciphers::table)
                     .values(&*self)
@@ -458,12 +461,22 @@ impl Cipher {
                     .execute(conn)
                     .map_res("Error saving cipher")
             }
+        };
+
+        // Best-effort plaintext URI index for the fill-only Agent API. Failures must not
+        // change the client-facing save result. Encrypted URIs are left untouched.
+        if saved.is_ok()
+            && let Err(err) = super::agent::sync_cipher_uri_index(&cipher_uuid, cipher_type, &cipher_data, conn).await
+        {
+            warn!("Failed to refresh agent URI index for {cipher_uuid}: {err}");
         }
+        saved
     }
 
     pub async fn delete(&self, conn: &DbConn) -> EmptyResult {
         self.update_users_revision(conn).await;
 
+        super::agent::purge_cipher(&self.uuid, conn).await?;
         FolderCipher::delete_all_by_cipher(&self.uuid, conn).await?;
         CollectionCipher::delete_all_by_cipher(&self.uuid, conn).await?;
         Attachment::delete_all_by_cipher(&self.uuid, conn).await?;

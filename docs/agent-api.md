@@ -1,0 +1,96 @@
+# Fill-only Agent API
+
+This is a fork-specific API. It is not Bitwarden's official agent, Secrets Manager, or fill-assist product, and it does not change official client routes.
+
+The API is off unless `AGENT_API_ENABLED=true`. While it is off, `/api/agent/*` responds with `Agent API is disabled`.
+
+Vaultwarden stores client-encrypted cipher fields. This server cannot decrypt them. The fill agent receives the stored login fields (usually ciphertext) plus the cipher key blob and decrypts them locally. The AI token never receives that payload.
+
+## Credentials
+
+Create and revoke both credentials from the admin page at `/admin/agents` (requires the normal admin token). The plaintext credential is shown once. Only its SHA-256 hash is stored.
+
+| Credential | Prefix | Can call |
+| --- | --- | --- |
+| AI agent token | `vwagent_` | Metadata and ticket create/status |
+| Fill agent | `vwfill_` | Pending tickets and redeem |
+
+These bearers are rejected by the normal user, organization, and send authenticators. They are not Bitwarden login JWTs and cannot call `/api/sync` or cipher detail routes.
+
+Revoke from the admin page. Revoked credentials stop working immediately. Deleting the user deletes their agent credentials, tickets, and audit rows.
+
+## What the AI can see
+
+`GET /api/agent/items?url=&q=`
+
+Returns login items the token is allowed to see:
+
+- id, name, folder id, plaintext folder name, normalized origins, reprompt flag
+- plaintext username only when `AGENT_REVEAL_USERNAMES=true`
+
+It does not return passwords, TOTP, cipher keys, notes, custom fields, cards, identities, SSH keys, attachments, or password history. Encrypted username ciphertext is never returned. Query strings and URL userinfo are stripped before a URI is indexed.
+
+Only personal login items are visible. Organization items are not part of this API.
+
+When `AGENT_REQUIRE_FOLDER_ACL=true` (the default), a token with no folder allowlist sees nothing. Folder UUIDs are set when the token is created.
+
+## URI index
+
+Matching uses a server-side URI index, because vault URIs are normally encrypted and cannot be read here.
+
+- Saving a cipher indexes plaintext `http`/`https` URIs automatically.
+- Encrypted URIs are ignored and do not wipe a previously published index.
+- The vault user (normal login, not the AI token) can publish decrypted origins:
+
+```http
+PUT /api/agent/items/<cipher-id>/uri-index
+Authorization: Bearer <user access token>
+
+{"uris":[{"uri":"https://example.com/login","match":1}]}
+```
+
+`DELETE` on that path clears the index.
+
+Default match (null) is strict host, scheme, and port. `example.com` does not allow `login.example.com`. Match type `0` allows subdomains of the item host, not the parent and not a different registrable name. IP literals are denied unless `AGENT_ALLOW_IP_ORIGINS=true`. Regex match (type `4`) is denied unless `AGENT_ALLOW_REGEX_URI_MATCH=true`, and patterns containing `.*` or `.+` are still rejected.
+
+## Fill ticket
+
+```http
+POST /api/agent/fills
+Authorization: Bearer vwagent_...
+
+{"itemId":"<cipher uuid>","origin":"https://example.com","fillAgentId":"<fill agent uuid>"}
+```
+
+The response is status, ticket id, expiry, and fill agent id. It does not include a redeem secret or any login field.
+
+The fill agent polls `GET /api/agent/fill-agent/pending` and receives the redeem secret, then:
+
+```http
+POST /api/agent/fill-agent/redeem
+Authorization: Bearer vwfill_...
+
+{"ticketId":"<id>","secret":"<redeem secret>"}
+```
+
+That response contains `login.username`, `login.password`, optional `login.totp`, and the cipher `key`. It is single-use. A second redeem fails, and the secret is cleared. Tickets expire after `AGENT_FILL_TICKET_TTL_SECS` (10–300, default 60).
+
+Password reprompt items can be listed but cannot be filled.
+
+## Audit
+
+Match, ticket create, redeem, deny, and URI-index updates are written to `agent_audit_log`. The admin page shows the latest rows. Details are fixed reason codes. Raw queries and secrets are not stored.
+
+## Environment
+
+| Variable | Default |
+| --- | --- |
+| `AGENT_API_ENABLED` | `false` |
+| `AGENT_REQUIRE_FOLDER_ACL` | `true` |
+| `AGENT_REVEAL_USERNAMES` | `false` |
+| `AGENT_ALLOW_IP_ORIGINS` | `false` |
+| `AGENT_ALLOW_REGEX_URI_MATCH` | `false` |
+| `AGENT_FILL_INCLUDE_TOTP` | `true` |
+| `AGENT_FILL_TICKET_TTL_SECS` | `60` |
+
+The same settings appear in the admin config page and `.env.template`.
