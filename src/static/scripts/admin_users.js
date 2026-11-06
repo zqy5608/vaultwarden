@@ -1,16 +1,16 @@
 "use strict";
-/* global DataTable, _post:readable, _delete:readable, BASE_URL:readable, reload:readable, jdenticon:readable */
+/* global AdminI18n, DataTable, _post:readable, _delete:readable, BASE_URL:readable, reload:readable, jdenticon:readable */
 
 function deleteUser(event) {
     event.preventDefault();
     event.stopPropagation();
-    const id = event.target.parentNode.dataset.vwUserUuid;
-    const email = event.target.parentNode.dataset.vwUserEmail;
+    const id = event.currentTarget.parentNode.dataset.vwUserUuid;
+    const email = event.currentTarget.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert(AdminI18n.message("Required parameters not found!"));
         return false;
     }
-    const input_email = prompt(`To delete user "${email}", please type the email below`);
+    const input_email = prompt(AdminI18n.t("To delete user \"{email}\", please type the email below", { email }));
     if (input_email != null) {
         if (input_email == email) {
             _post(`${BASE_URL}/admin/users/${id}/delete`,
@@ -18,7 +18,7 @@ function deleteUser(event) {
                 "Error deleting user"
             );
         } else {
-            alert("Wrong email, please try again");
+            alert(AdminI18n.message("Wrong email, please try again"));
         }
     }
 }
@@ -26,13 +26,13 @@ function deleteUser(event) {
 function deleteSSOUser(event) {
     event.preventDefault();
     event.stopPropagation();
-    const id = event.target.parentNode.dataset.vwUserUuid;
-    const email = event.target.parentNode.dataset.vwUserEmail;
+    const id = event.currentTarget.parentNode.dataset.vwUserUuid;
+    const email = event.currentTarget.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert(AdminI18n.message("Required parameters not found!"));
         return false;
     }
-    const input_email = prompt(`To delete user "${email}" SSO association, please type the email below`);
+    const input_email = prompt(AdminI18n.t("To delete user \"{email}\" SSO association, please type the email below", { email }));
     if (input_email != null) {
         if (input_email == email) {
             _delete(`${BASE_URL}/admin/users/${id}/sso`,
@@ -40,7 +40,7 @@ function deleteSSOUser(event) {
                 "Error deleting user SSO association"
             );
         } else {
-            alert("Wrong email, please try again");
+            alert(AdminI18n.message("Wrong email, please try again"));
         }
     }
 }
@@ -48,13 +48,13 @@ function deleteSSOUser(event) {
 function remove2fa(event) {
     event.preventDefault();
     event.stopPropagation();
-    const id = event.target.parentNode.dataset.vwUserUuid;
-    const email = event.target.parentNode.dataset.vwUserEmail;
+    const id = event.currentTarget.parentNode.dataset.vwUserUuid;
+    const email = event.currentTarget.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert(AdminI18n.message("Required parameters not found!"));
         return false;
     }
-    const confirmed = confirm(`Are you sure you want to remove 2FA for "${email}"?`);
+    const confirmed = confirm(AdminI18n.t("Are you sure you want to remove 2FA for \"{email}\"?", { email }));
     if (confirmed) {
         _post(`${BASE_URL}/admin/users/${id}/remove-2fa`,
             "2FA removed correctly",
@@ -66,13 +66,13 @@ function remove2fa(event) {
 function deauthUser(event) {
     event.preventDefault();
     event.stopPropagation();
-    const id = event.target.parentNode.dataset.vwUserUuid;
-    const email = event.target.parentNode.dataset.vwUserEmail;
+    const id = event.currentTarget.parentNode.dataset.vwUserUuid;
+    const email = event.currentTarget.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert(AdminI18n.message("Required parameters not found!"));
         return false;
     }
-    const confirmed = confirm(`Are you sure you want to deauthorize sessions for "${email}"?`);
+    const confirmed = confirm(AdminI18n.t("Are you sure you want to deauthorize sessions for \"{email}\"?", { email }));
     if (confirmed) {
         _post(`${BASE_URL}/admin/users/${id}/deauth`,
             "Sessions deauthorized correctly",
@@ -84,13 +84,13 @@ function deauthUser(event) {
 function disableUser(event) {
     event.preventDefault();
     event.stopPropagation();
-    const id = event.target.parentNode.dataset.vwUserUuid;
-    const email = event.target.parentNode.dataset.vwUserEmail;
+    const id = event.currentTarget.parentNode.dataset.vwUserUuid;
+    const email = event.currentTarget.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert(AdminI18n.message("Required parameters not found!"));
         return false;
     }
-    const confirmed = confirm(`Are you sure you want to disable user "${email}"? This will also deauthorize their sessions.`);
+    const confirmed = confirm(AdminI18n.t("Are you sure you want to disable user \"{email}\"? This will also deauthorize their sessions.", { email }));
     if (confirmed) {
         _post(`${BASE_URL}/admin/users/${id}/disable`,
             "User disabled successfully",
@@ -102,13 +102,13 @@ function disableUser(event) {
 function enableUser(event) {
     event.preventDefault();
     event.stopPropagation();
-    const id = event.target.parentNode.dataset.vwUserUuid;
-    const email = event.target.parentNode.dataset.vwUserEmail;
+    const id = event.currentTarget.parentNode.dataset.vwUserUuid;
+    const email = event.currentTarget.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert(AdminI18n.message("Required parameters not found!"));
         return false;
     }
-    const confirmed = confirm(`Are you sure you want to enable user "${email}"?`);
+    const confirmed = confirm(AdminI18n.t("Are you sure you want to enable user \"{email}\"?", { email }));
     if (confirmed) {
         _post(`${BASE_URL}/admin/users/${id}/enable`,
             "User enabled successfully",
@@ -144,13 +144,13 @@ function inviteUser(event) {
 function resendUserInvite(event) {
     event.preventDefault();
     event.stopPropagation();
-    const id = event.target.parentNode.dataset.vwUserUuid;
-    const email = event.target.parentNode.dataset.vwUserEmail;
+    const id = event.currentTarget.parentNode.dataset.vwUserUuid;
+    const email = event.currentTarget.parentNode.dataset.vwUserEmail;
     if (!id || !email) {
-        alert("Required parameters not found!");
+        alert(AdminI18n.message("Required parameters not found!"));
         return false;
     }
-    const confirmed = confirm(`Are you sure you want to resend invitation for "${email}"?`);
+    const confirmed = confirm(AdminI18n.t("Are you sure you want to resend invitation for \"{email}\"?", { email }));
     if (confirmed) {
         _post(`${BASE_URL}/admin/users/${id}/invite/resend`,
             "Invite sent successfully",
@@ -227,7 +227,7 @@ function initUserTable() {
         if (orgType.font !== undefined) {
             e.style.color = orgType.font;
         }
-        e.title = orgType.name;
+        e.title = AdminI18n.t(orgType.name);
     });
 
     document.querySelectorAll("button[vw-remove2fa]").forEach(btn => {
@@ -291,10 +291,11 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
             initUserTable();
         },
         "stateSave": true,
+        "language": AdminI18n.tableLanguage(),
         "responsive": true,
         "lengthMenu": [
             [-1, 2, 5, 10, 25, 50],
-            ["All", 2, 5, 10, 25, 50]
+            [AdminI18n.t("All"), 2, 5, 10, 25, 50]
         ],
         "pageLength": -1, // Default show all
         "columnDefs": [{
