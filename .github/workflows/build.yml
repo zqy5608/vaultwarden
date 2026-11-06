@@ -68,6 +68,11 @@ jobs:
           fetch-depth: 0
       # End Checkout the repo
 
+      - name: Check admin localization
+        run: |
+          for script in src/static/scripts/admin*.js; do node --check "$script"; done
+          node tools/test-admin-i18n.cjs
+
       # Determine rust-toolchain version
       - name: Init Variables
         id: toolchain
