@@ -349,6 +349,8 @@ pub static STATIC_FILES: LazyLock<HashMap<&'static str, StaticFile>> = LazyLock:
         ("404.css", ContentType::CSS, &include_bytes!("../static/scripts/404.css")[..]),
         ("admin.css", ContentType::CSS, &include_bytes!("../static/scripts/admin.css")[..]),
         ("admin.js", ContentType::JavaScript, &include_bytes!("../static/scripts/admin.js")[..]),
+        ("admin_zh.js", ContentType::JavaScript, &include_bytes!("../static/scripts/admin_zh.js")[..]),
+        ("admin_i18n.js", ContentType::JavaScript, &include_bytes!("../static/scripts/admin_i18n.js")[..]),
         ("vw-agent-uri.js", ContentType::JavaScript, &include_bytes!("../static/scripts/vw-agent-uri.js")[..]),
         ("admin_settings.js", ContentType::JavaScript, &include_bytes!("../static/scripts/admin_settings.js")[..]),
         ("admin_users.js", ContentType::JavaScript, &include_bytes!("../static/scripts/admin_users.js")[..]),

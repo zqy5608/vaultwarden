@@ -1,5 +1,5 @@
 "use strict";
-/* global BASE_URL:readable, bootstrap:readable */
+/* global AdminI18n, BASE_URL:readable, bootstrap:readable */
 
 var dnsCheck = false;
 var timeCheck = false;
@@ -125,7 +125,7 @@ async function generateSupportString(event, dj) {
         "headers": { "Accept": "application/json" }
     });
     if (!jsonResponse.ok) {
-        alert("Generation failed: " + jsonResponse.statusText);
+        alert(AdminI18n.t("Generation failed:") + " " + jsonResponse.statusText);
         throw new Error(jsonResponse);
     }
     const configJson = await jsonResponse.json();

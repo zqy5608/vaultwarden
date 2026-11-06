@@ -14,6 +14,7 @@ extend-ignore-re = [
     # In SMTP it's called HELO, so ignore it
     "(?i)helo_name",
     "Server name sent during.+HELO",
+    "HELO 发送的服务器名称",
     # COSE Is short for CBOR Object Signing and Encryption, ignore these specific items
     "COSEKey",
     "COSEAlgorithm",

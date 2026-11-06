@@ -1,24 +1,14 @@
-<main class="container-xxl">
-    {{#if error}}
-    <div class="align-items-center p-3 mb-3 text-opacity-50 text-dark bg-warning rounded shadow">
-        <div>
-            <h6 class="mb-0 text-dark">{{error}}</h6>
-        </div>
-    </div>
-    {{/if}}
-
-    <div class="align-items-center p-3 mb-3 text-opacity-75 text-light bg-danger rounded shadow">
-        <div>
-            <h6 class="mb-0 text-light">Authentication key needed to continue</h6>
-            <small>Please provide it below:</small>
-
-            <form class="form-inline" method="post" action="{{urlpath}}/admin">
-                <input type="password" autocomplete="password" class="form-control w-50 mr-2" name="token" placeholder="Enter admin token" autofocus="autofocus">
-                {{#if redirect}}
-                <input type="hidden" id="redirect" name="redirect" value="/{{redirect}}">
-                {{/if}}
-                <button type="submit" class="btn btn-primary mt-2">Enter</button>
-            </form>
-        </div>
+<main class="container-xxl admin-login-main">
+    <div class="admin-panel admin-login-card">
+        <img class="admin-login-icon" src="{{urlpath}}/vw_static/vaultwarden-icon.png" alt="">
+        <header class="admin-page-header"><h1 data-i18n="Welcome back">Welcome back</h1><p data-i18n="Sign in to your Vaultwarden admin panel.">Sign in to your Vaultwarden admin panel.</p></header>
+        {{#if error}}<div class="alert alert-danger" role="alert" data-i18n="{{error}}">{{error}}</div>{{/if}}
+        <form method="post" action="{{urlpath}}/admin">
+            <label class="form-label" for="admin-token" data-i18n="Admin token">Admin token</label>
+            <input id="admin-token" type="password" autocomplete="current-password" class="form-control" name="token" placeholder="Enter admin token" required autofocus data-i18n-placeholder="Enter admin token">
+            {{#if redirect}}<input type="hidden" id="redirect" name="redirect" value="/{{redirect}}">{{/if}}
+            <button type="submit" class="btn btn-primary w-100 mt-4" data-i18n="Enter">Enter</button>
+        </form>
+        <p class="small text-body-secondary mt-4 mb-0" data-i18n="Use your instance&#x27;s admin token to continue.">Use your instance's admin token to continue.</p>
     </div>
 </main>

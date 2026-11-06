@@ -1,21 +1,21 @@
 "use strict";
-/* global DataTable, _post:readable, BASE_URL:readable, reload:readable, jdenticon:readable */
+/* global AdminI18n, DataTable, _post:readable, BASE_URL:readable, reload:readable, jdenticon:readable */
 
 function deleteOrganization(event) {
     event.preventDefault();
     event.stopPropagation();
-    const org_uuid = event.target.dataset.vwOrgUuid;
-    const org_name = event.target.dataset.vwOrgName;
-    const billing_email = event.target.dataset.vwBillingEmail;
+    const org_uuid = event.currentTarget.dataset.vwOrgUuid;
+    const org_name = event.currentTarget.dataset.vwOrgName;
+    const billing_email = event.currentTarget.dataset.vwBillingEmail;
     if (!org_uuid) {
-        alert("Required parameters not found!");
+        alert(AdminI18n.message("Required parameters not found!"));
         return false;
     }
 
     // First make sure the user wants to delete this organization
-    const continueDelete = confirm(`WARNING: All data of this organization (${org_name}) will be lost!\nMake sure you have a backup, this cannot be undone!`);
+    const continueDelete = confirm(AdminI18n.t("WARNING: All data of this organization ({org_name}) will be lost!\nMake sure you have a backup, this cannot be undone!", { org_name }));
     if (continueDelete == true) {
-        const input_org_uuid = prompt(`To delete the organization "${org_name} (${billing_email})", please type the organization uuid below.`);
+        const input_org_uuid = prompt(AdminI18n.t("To delete the organization \"{org_name} ({billing_email})\", please type the organization uuid below.", { org_name, billing_email }));
         if (input_org_uuid != null) {
             if (input_org_uuid == org_uuid) {
                 _post(`${BASE_URL}/admin/organizations/${org_uuid}/delete`,
@@ -23,7 +23,7 @@ function deleteOrganization(event) {
                     "Error deleting organization"
                 );
             } else {
-                alert("Wrong organization uuid, please try again");
+                alert(AdminI18n.message("Wrong organization uuid, please try again"));
             }
         }
     }
@@ -47,10 +47,11 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
             initActions();
         },
         "stateSave": true,
+        "language": AdminI18n.tableLanguage(),
         "responsive": true,
         "lengthMenu": [
             [-1, 5, 10, 25, 50],
-            ["All", 5, 10, 25, 50]
+            [AdminI18n.t("All"), 5, 10, 25, 50]
         ],
         "pageLength": -1, // Default show all
         "columnDefs": [{

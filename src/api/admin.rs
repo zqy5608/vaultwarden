@@ -174,7 +174,8 @@ fn render_admin_login(msg: Option<&str>, redirect: Option<&str>) -> ApiResult<Ht
     let json = json!({
         "page_content": "admin/login",
         "error": msg,
-        "redirect": redirect,
+        // The login template adds a slash, including when redisplayed after a failed login.
+        "redirect": redirect.map(|path| path.trim_start_matches('/')),
         "urlpath": CONFIG.domain_path()
     });
 
@@ -1142,6 +1143,33 @@ async fn revoke_fill_agent(fill_agent_id: FillAgentId, _token: AdminToken, conn:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn admin_shell_preserves_login_boundary_and_subpath() {
+        let mut hb = handlebars::Handlebars::new();
+        hb.set_strict_mode(true);
+        hb.register_template_string("base", include_str!("../static/templates/admin/base.hbs")).unwrap();
+        hb.register_template_string("content", "<main>Fixture</main>").unwrap();
+        for logged_in in [false, true] {
+            let html = hb
+                .render(
+                    "base",
+                    &json!({
+                        "page_content": "content",
+                        "logged_in": logged_in,
+                        "urlpath": "/vault",
+                    }),
+                )
+                .unwrap();
+            assert!(html.contains("data-bs-theme=\"light\""));
+            assert!(html.contains("href=\"#admin-content\""));
+            assert!(html.contains("aria-controls=\"navbarCollapse\""));
+            assert!(html.contains("src=\"/vault/vw_static/admin.js\""));
+            assert!(html.contains("<main>Fixture</main>"));
+            assert_eq!(html.contains("href=\"/vault/admin/agents\""), logged_in);
+            assert_eq!(html.contains("href=\"/vault/admin/logout\""), logged_in);
+        }
+    }
 
     #[test]
     fn empty_folder_create_succeeds_when_acl_is_off() {

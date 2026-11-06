@@ -1,11 +1,11 @@
 "use strict";
-/* global _post:readable, BASE_URL:readable */
+/* global AdminI18n, _post:readable, BASE_URL:readable */
 
 function smtpTest(event) {
     event.preventDefault();
     event.stopPropagation();
     if (formHasChanges(config_form)) {
-        alert("Config has been changed but not yet saved.\nPlease save the changes first before sending a test email.");
+        alert(AdminI18n.message("Config has been changed but not yet saved.\nPlease save the changes first before sending a test email."));
         return false;
     }
 
@@ -55,17 +55,17 @@ function saveConfig(event) {
 function deleteConf(event) {
     event.preventDefault();
     event.stopPropagation();
-    const input = prompt(
+    const input = prompt(AdminI18n.t(
         "This will remove all user configurations, and restore the defaults and the " +
         "values set by the environment. This operation could be dangerous. Type 'DELETE' to proceed:"
-    );
+    ));
     if (input === "DELETE") {
         _post(`${BASE_URL}/admin/config/delete`,
             "Config deleted correctly",
             "Error deleting config"
         );
     } else {
-        alert("Wrong input, please try again");
+        alert(AdminI18n.message("Wrong input, please try again"));
     }
 }
 
@@ -121,7 +121,7 @@ function submitTestEmailOnEnter() {
 function colorRiskSettings() {
     const risk_items = document.getElementsByClassName("col-form-label");
     Array.from(risk_items).forEach((el) => {
-        if (el.textContent.toLowerCase().includes("risks") ) {
+        if ((el.querySelector("[data-i18n-config-name]")?.dataset.adminSourceText || el.textContent).toLowerCase().includes("risks") ) {
             el.parentElement.className += " alert-danger";
         }
     });
@@ -131,7 +131,7 @@ function toggleVis(event) {
     event.preventDefault();
     event.stopPropagation();
 
-    const elem = document.getElementById(event.target.dataset.vwPwToggle);
+    const elem = document.getElementById(event.currentTarget.dataset.vwPwToggle);
     const type = elem.getAttribute("type");
     if (type === "text") {
         elem.setAttribute("type", "password");

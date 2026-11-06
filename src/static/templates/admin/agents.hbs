@@ -1,207 +1,215 @@
 <main class="container-xxl">
-    <div class="my-3 p-3 rounded shadow">
-        <h6 class="border-bottom pb-2 mb-3">Agent API</h6>
-        <p class="small mb-2">
-            Fork-specific fill-only API at <code>/api/agent</code>. It is
-            {{#if page_data.enabled}}<strong>enabled</strong>{{else}}<strong>disabled</strong>{{/if}}.
-            AI tokens cannot read passwords. Only a registered fill agent can redeem a ticket.
-            {{#if page_data.requireFolderAcl}}
-            New AI tokens need at least one folder from that user.
-            {{else}}
-            A new AI token can omit folders and then sees that user's eligible personal logins.
-            {{/if}}
-        </p>
-        <p class="small text-body-secondary">Credentials are shown once. Store them outside the vault. Revoking a credential blocks it immediately.</p>
-
+    <header class="admin-page-header"><h1><span data-i18n="Agent API">Agent API</span> {{#if page_data.enabled}}<span class="badge admin-status-enabled" data-i18n="Enabled">Enabled</span>{{else}}<span class="badge text-bg-secondary" data-i18n="Disabled">Disabled</span>{{/if}}</h1><p data-i18n="Manage AI access without exposing passwords.">Manage AI access without exposing passwords.</p></header>
+    <div class="admin-notice mb-4" data-i18n="AI tokens request fills without reading passwords. Only a registered fill agent can redeem a ticket and decrypt locally.">AI tokens request fills without reading passwords. Only a registered fill agent can redeem a ticket and decrypt locally.</div>
         <div id="agent-secret-panel" class="alert alert-warning" hidden>
-            <div class="fw-semibold">Copy this credential now. It will not be shown again.</div>
+            <div class="fw-semibold" data-i18n="Copy this credential now. It will not be shown again.">Copy this credential now. It will not be shown again.</div>
             <pre id="agent-secret-value" class="mb-2 user-select-all"></pre>
-            <button type="button" class="btn btn-sm btn-secondary" id="agent-secret-done">Done</button>
+            <button type="button" class="btn btn-sm btn-secondary" id="agent-secret-done" data-i18n="Done">Done</button>
         </div>
 
-        <div class="row g-3">
-            <div class="col-lg-6">
-                <h6>AI agent token</h6>
-                <form id="agent-token-form" class="row g-2" data-require-folder-acl="{{#if page_data.requireFolderAcl}}true{{else}}false{{/if}}">
-                    <div class="col-12">
-                        <label class="form-label small" for="agent-user-email">User email</label>
-                        <input class="form-control form-control-sm" id="agent-user-email" type="email" autocomplete="off" required>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label small" for="agent-token-name">Name</label>
-                        <input class="form-control form-control-sm" id="agent-token-name" autocomplete="off" required>
-                    </div>
-                    <div class="col-12">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="form-label small mb-0" id="agent-folder-label">Folders</span>
-                            <div class="btn-group btn-group-sm" id="agent-folder-actions" hidden>
-                                <button type="button" class="btn btn-outline-secondary" id="agent-folder-all">All</button>
-                                <button type="button" class="btn btn-outline-secondary" id="agent-folder-none">None</button>
+    <div class="admin-agents-layout">
+        <aside class="admin-agent-create">
+            <section class="admin-panel">
+                <h2 class="admin-section-title" data-i18n="Create credential">Create credential</h2>
+                <div class="nav nav-pills admin-credential-tabs" role="tablist" aria-label="Credential type" data-i18n-aria-label="Credential type">
+                    <button class="nav-link active" id="ai-tab" data-bs-toggle="pill" data-bs-target="#ai-create" type="button" role="tab" aria-controls="ai-create" aria-selected="true" data-i18n="AI token">AI token</button>
+                    <button class="nav-link" id="fill-tab" data-bs-toggle="pill" data-bs-target="#fill-create" type="button" role="tab" aria-controls="fill-create" aria-selected="false" data-i18n="Fill agent">Fill agent</button>
+                </div>
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="ai-create" role="tabpanel" aria-labelledby="ai-tab" tabindex="0">
+                        <form id="agent-token-form" class="row g-2" data-require-folder-acl="{{#if page_data.requireFolderAcl}}true{{else}}false{{/if}}">
+                            <div class="col-12">
+                                <label class="form-label small" for="agent-user-email" data-i18n="User email">User email</label>
+                                <input class="form-control form-control-sm" id="agent-user-email" type="email" autocomplete="off" required>
                             </div>
-                        </div>
-                        <div id="agent-folder-list" class="border rounded p-2 small" role="group" aria-labelledby="agent-folder-label">
-                            <span class="text-body-secondary">Enter a user email to load folders.</span>
-                        </div>
-                        <div class="form-text" id="agent-folder-help">
-                            {{#if page_data.requireFolderAcl}}
-                            Select at least one folder. The token only sees logins in those folders.
-                            {{else}}
-                            Leave every folder unchecked to allow this user's eligible personal logins, including items with no folder. Any checked folder limits the token to that selection.
-                            {{/if}}
-                        </div>
-                        <div class="form-text" id="agent-folder-status"></div>
+                            <div class="col-12">
+                                <label class="form-label small" for="agent-token-name" data-i18n="Name">Name</label>
+                                <input class="form-control form-control-sm" id="agent-token-name" autocomplete="off" required>
+                            </div>
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="form-label small mb-0" id="agent-folder-label" data-i18n="Folders">Folders</span>
+                                    <div class="btn-group btn-group-sm" id="agent-folder-actions" hidden>
+                                        <button type="button" class="btn btn-outline-secondary" id="agent-folder-all" data-i18n="All">All</button>
+                                        <button type="button" class="btn btn-outline-secondary" id="agent-folder-none" data-i18n="None">None</button>
+                                    </div>
+                                </div>
+                                <div id="agent-folder-list" class="border rounded p-2 small" role="group" aria-labelledby="agent-folder-label">
+                                    <span class="text-body-secondary" data-i18n="Enter a user email to load folders.">Enter a user email to load folders.</span>
+                                </div>
+                                <div class="form-text" id="agent-folder-help">
+                                    {{#if page_data.requireFolderAcl}}
+                                    <span data-i18n="Select at least one folder. The token only sees logins in those folders.">Select at least one folder. The token only sees logins in those folders.</span>
+                                    {{else}}
+                                    <span data-i18n="Leave every folder unchecked to allow this user&#x27;s eligible personal logins, including items with no folder. Any checked folder limits the token to that selection.">Leave every folder unchecked to allow this user's eligible personal logins, including items with no folder. Any checked folder limits the token to that selection.</span>
+                                    {{/if}}
+                                </div>
+                                <div class="form-text" id="agent-folder-status"></div>
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-sm btn-primary" type="submit" data-i18n="Create agent token">Create agent token</button>
+                            </div>
+                        </form>
                     </div>
-                    <div class="col-12">
-                        <button class="btn btn-sm btn-primary" type="submit">Create agent token</button>
+                    <div class="tab-pane fade" id="fill-create" role="tabpanel" aria-labelledby="fill-tab" tabindex="0">
+                        <form id="fill-agent-form" class="row g-2">
+                            <div class="col-12">
+                                <label class="form-label small" for="fill-agent-email" data-i18n="User email">User email</label>
+                                <input class="form-control form-control-sm" id="fill-agent-email" type="email" autocomplete="off" required>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small" for="fill-agent-name" data-i18n="Name">Name</label>
+                                <input class="form-control form-control-sm" id="fill-agent-name" autocomplete="off" required>
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-sm btn-primary" type="submit" data-i18n="Create fill agent">Create fill agent</button>
+                            </div>
+                        </form>
                     </div>
-                </form>
-            </div>
-            <div class="col-lg-6">
-                <h6>Fill agent</h6>
-                <form id="fill-agent-form" class="row g-2">
-                    <div class="col-12">
-                        <label class="form-label small" for="fill-agent-email">User email</label>
-                        <input class="form-control form-control-sm" id="fill-agent-email" autocomplete="off" required>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label small" for="fill-agent-name">Name</label>
-                        <input class="form-control form-control-sm" id="fill-agent-name" autocomplete="off" required>
-                    </div>
-                    <div class="col-12">
-                        <button class="btn btn-sm btn-primary" type="submit">Create fill agent</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
+                </div>
+                <p class="small text-body-secondary mt-3 mb-0" data-i18n="Credentials are shown once. Store them securely. Revoking a credential blocks it immediately.">Credentials are shown once. Store them securely. Revoking a credential blocks it immediately.</p>
+            </section>
+            <section class="admin-panel admin-publishing">
+                <h2 class="admin-section-title" data-i18n="Publishing sites">Publishing sites</h2>
+                <p class="small mb-0"><span data-i18n="In your unlocked vault, open a personal login and use">In your unlocked vault, open a personal login and use</span> <strong><span data-i18n="Agent sites">Agent sites</span></strong> <span data-i18n="to publish its websites for fill matching.">to publish its websites for fill matching.</span></p>
+                <details><summary><span data-i18n="Publishing details and CLI options">Publishing details and CLI options</span></summary>
+                <p class="small mb-2">
+                    <span data-i18n="Fill matching uses each personal login&#x27;s URI index. Saving a cipher indexes plaintext">Fill matching uses each personal login's URI index. Saving a cipher indexes plaintext</span>
+                    <code>http</code> <span data-i18n="and">and</span> <code>https</code> <span data-i18n="websites. Official clients encrypt those websites before save, so that save does not fill the index and does not erase one that was already published.">websites. Official clients encrypt those websites
+                    before save, so that save does not fill the index and does not erase one that was already published.</span>
+                </p>
+                <p class="small mb-2">
+                    <span data-i18n="The vault user publishes websites. An AI token cannot. On the web vault, unlock, open a personal login, and use">The vault user publishes websites. An AI token cannot. On the web vault, unlock, open a personal
+                    login, and use</span> <strong><span data-i18n="Agent sites">Agent sites</span></strong><span data-i18n=". The button uses the unlocked session and asks before it sends anything. It sends websites only.">. The button uses the unlocked session and asks before
+                    it sends anything. It sends websites only.</span>
+                </p>
+                <p class="small mb-0">
+                    <span data-i18n="From a shell,">From a shell,</span> <code>examples/agent-fill-client/publish_uri.py</code> <span data-i18n="signs in with the vault user&#x27;s email and master password, or it accepts a one-shot user access token. See">signs in with the vault user's
+                    email and master password, or it accepts a one-shot user access token. See</span>
+                    <code>docs/agent-api.md</code>.
+                </p>
+                </details>
+            </section>
+        </aside>
+        <section class="admin-agent-inventory" aria-label="Credentials and activity" data-i18n-aria-label="Credentials and activity">
 
-    <div class="my-3 p-3 rounded shadow">
-        <h6 class="border-bottom pb-2 mb-3">AI tokens</h6>
-        <div class="table-responsive-xl small">
-            <table class="table table-sm table-striped">
-                <thead>
-                    <tr>
-                        <th>User</th>
-                        <th>Name</th>
-                        <th>Prefix</th>
-                        <th>Folders</th>
-                        <th>Created</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each page_data.tokens}}
-                    <tr>
-                        <td>{{email}}</td>
-                        <td>{{name}}</td>
-                        <td><code>{{tokenPrefix}}</code></td>
-                        <td>
-                            {{#each folders}}
-                            <div title="{{id}}">{{label}}</div>
+            <div class="admin-panel">
+                <h2 class="admin-section-title" data-i18n="AI tokens">AI tokens</h2>
+                <div class="table-responsive small">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th data-i18n="Name">Name</th>
+                                <th data-i18n="User">User</th>
+                                <th data-i18n="Prefix">Prefix</th>
+                                <th data-i18n="Folders">Folders</th>
+                                <th data-i18n="Created">Created</th>
+                                <th scope="col"><span class="visually-hidden" data-i18n="Actions">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{#each page_data.tokens}}
+                            <tr>
+                                <td><strong>{{name}}</strong></td>
+                                <td>{{email}}</td>
+                                <td><code>{{tokenPrefix}}</code></td>
+                                <td>
+                                    {{#each folders}}
+                                    <div title="{{id}}">{{label}}</div>
+                                    {{else}}
+                                    {{#if unrestricted}}
+                                    <span class="text-body-secondary" data-i18n="All eligible logins">All eligible logins</span>
+                                    {{else}}
+                                    <span class="text-body-secondary" data-i18n="None">None</span>
+                                    {{/if}}
+                                    {{/each}}
+                                </td>
+                                <td>{{createdAt}}</td>
+                                <td class="text-end">
+                                    {{#if revoked}}
+                                    <span class="badge bg-secondary" data-i18n="Revoked">Revoked</span>
+                                    {{else}}
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-agent-revoke="token" data-agent-id="{{id}}" data-i18n="Revoke">Revoke</button>
+                                    {{/if}}
+                                </td>
+                            </tr>
                             {{else}}
-                            {{#if unrestricted}}
-                            <span class="text-body-secondary">All eligible logins</span>
-                            {{else}}
-                            <span class="text-body-secondary">None</span>
-                            {{/if}}
+                            <tr><td colspan="6" class="admin-empty"><span data-i18n="No AI tokens yet. Create one to grant scoped access.">No AI tokens yet. Create one to grant scoped access.</span></td></tr>
                             {{/each}}
-                        </td>
-                        <td>{{createdAt}}</td>
-                        <td class="text-end">
-                            {{#if revoked}}
-                            <span class="badge bg-secondary">Revoked</span>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="admin-panel">
+                <h2 class="admin-section-title" data-i18n="Fill agents">Fill agents</h2>
+                <div class="table-responsive small">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th data-i18n="Name">Name</th>
+                                <th data-i18n="User">User</th>
+                                <th data-i18n="Id">Id</th>
+                                <th data-i18n="Prefix">Prefix</th>
+                                <th data-i18n="Created">Created</th>
+                                <th scope="col"><span class="visually-hidden" data-i18n="Actions">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{#each page_data.fillAgents}}
+                            <tr>
+                                <td><strong>{{name}}</strong></td>
+                                <td>{{email}}</td>
+                                <td><code>{{id}}</code></td>
+                                <td><code>{{tokenPrefix}}</code></td>
+                                <td>{{createdAt}}</td>
+                                <td class="text-end">
+                                    {{#if revoked}}
+                                    <span class="badge bg-secondary" data-i18n="Revoked">Revoked</span>
+                                    {{else}}
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-agent-revoke="fill" data-agent-id="{{id}}" data-i18n="Revoke">Revoke</button>
+                                    {{/if}}
+                                </td>
+                            </tr>
                             {{else}}
-                            <button type="button" class="btn btn-sm btn-outline-danger" data-agent-revoke="token" data-agent-id="{{id}}">Revoke</button>
-                            {{/if}}
-                        </td>
-                    </tr>
-                    {{/each}}
-                </tbody>
-            </table>
-        </div>
-    </div>
+                            <tr><td colspan="6" class="admin-empty"><span data-i18n="No fill agents yet. Register a device to redeem fill tickets.">No fill agents yet. Register a device to redeem fill tickets.</span></td></tr>
+                            {{/each}}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-body-secondary mb-0"><span data-i18n="The fill agent id is not a secret. The AI client sends it when requesting a fill. The">The fill agent id is not a secret. The AI client sends it when requesting a fill. The</span> <code>vwfill_</code> <span data-i18n="token is the credential that redeems the ticket.">token is the credential that redeems the ticket.</span></p>
+            </div>
 
-    <div class="my-3 p-3 rounded shadow">
-        <h6 class="border-bottom pb-2 mb-3">Fill agents</h6>
-        <div class="table-responsive-xl small">
-            <table class="table table-sm table-striped">
-                <thead>
-                    <tr>
-                        <th>User</th>
-                        <th>Name</th>
-                        <th>Id</th>
-                        <th>Prefix</th>
-                        <th>Created</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each page_data.fillAgents}}
-                    <tr>
-                        <td>{{email}}</td>
-                        <td>{{name}}</td>
-                        <td><code>{{id}}</code></td>
-                        <td><code>{{tokenPrefix}}</code></td>
-                        <td>{{createdAt}}</td>
-                        <td class="text-end">
-                            {{#if revoked}}
-                            <span class="badge bg-secondary">Revoked</span>
+            <div class="admin-panel">
+                <h2 class="admin-section-title" data-i18n="Recent agent audit">Recent agent audit</h2>
+                <div class="table-responsive small">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th data-i18n="When">When</th>
+                                <th data-i18n="Action">Action</th>
+                                <th data-i18n="Detail">Detail</th>
+                                <th data-i18n="Origin">Origin</th>
+                                <th data-i18n="IP">IP</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{#each page_data.audit}}
+                            <tr>
+                                <td>{{createdAt}}</td>
+                                <td>{{action}}</td>
+                                <td>{{detail}}</td>
+                                <td>{{origin}}</td>
+                                <td>{{ip}}</td>
+                            </tr>
                             {{else}}
-                            <button type="button" class="btn btn-sm btn-outline-danger" data-agent-revoke="fill" data-agent-id="{{id}}">Revoke</button>
-                            {{/if}}
-                        </td>
-                    </tr>
-                    {{/each}}
-                </tbody>
-            </table>
-        </div>
-        <p class="small text-body-secondary mb-0">The fill agent id is not a secret. The AI client sends it when requesting a fill. The <code>vwfill_</code> token is the credential that redeems the ticket.</p>
-    </div>
+                            <tr><td colspan="5" class="admin-empty"><span data-i18n="No agent activity yet.">No agent activity yet.</span></td></tr>
+                            {{/each}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-    <div class="my-3 p-3 rounded shadow">
-        <h6 class="border-bottom pb-2 mb-3">Publishing sites</h6>
-        <p class="small mb-2">
-            Fill matching uses each personal login's URI index. Saving a cipher indexes plaintext
-            <code>http</code> and <code>https</code> websites. Official clients encrypt those websites
-            before save, so that save does not fill the index and does not erase one that was already published.
-        </p>
-        <p class="small mb-2">
-            The vault user publishes websites. An AI token cannot. On the web vault, unlock, open a personal
-            login, and use <strong>Agent sites</strong>. The button uses the unlocked session and asks before
-            it sends anything. It sends websites only.
-        </p>
-        <p class="small mb-0">
-            From a shell, <code>examples/agent-fill-client/publish_uri.py</code> signs in with the vault user's
-            email and master password, or it accepts a one-shot user access token. See
-            <code>docs/agent-api.md</code>.
-        </p>
-    </div>
-
-    <div class="my-3 p-3 rounded shadow">
-        <h6 class="border-bottom pb-2 mb-3">Recent agent audit</h6>
-        <div class="table-responsive-xl small">
-            <table class="table table-sm table-striped">
-                <thead>
-                    <tr>
-                        <th>When</th>
-                        <th>Action</th>
-                        <th>Detail</th>
-                        <th>Origin</th>
-                        <th>IP</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each page_data.audit}}
-                    <tr>
-                        <td>{{createdAt}}</td>
-                        <td>{{action}}</td>
-                        <td>{{detail}}</td>
-                        <td>{{origin}}</td>
-                        <td>{{ip}}</td>
-                    </tr>
-                    {{/each}}
-                </tbody>
-            </table>
-        </div>
+        </section>
     </div>
 </main>

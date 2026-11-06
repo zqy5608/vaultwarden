@@ -1,4 +1,5 @@
 "use strict";
+/* global AdminI18n */
 /* exported BASE_URL, _post, _delete */
 
 function getBaseUrl() {
@@ -23,7 +24,7 @@ function reload() {
 }
 
 function msg(text, reload_page = true) {
-    text && alert(text);
+    text && alert(AdminI18n.message(text));
     reload_page && reload();
 }
 
@@ -152,7 +153,7 @@ function scheduleAgentFolderLoad(email, delay) {
 function setAgentFolderStatus(text) {
     const status = document.getElementById("agent-folder-status");
     if (status) {
-        status.textContent = text || "";
+        status.textContent = AdminI18n.t(text || "");
     }
 }
 
@@ -169,7 +170,7 @@ function setAgentFolderMessage(text) {
     list.replaceChildren();
     const note = document.createElement("span");
     note.className = "text-body-secondary";
-    note.textContent = text;
+    note.textContent = AdminI18n.t(text);
     list.appendChild(note);
 }
 
@@ -201,12 +202,12 @@ function agentServerMessage(data) {
 function agentFailureMessage(resp, data, fallback) {
     const server = agentServerMessage(data);
     if (server) {
-        return server;
+        return AdminI18n.t(server);
     }
     const status = resp && resp.status ? String(resp.status) : "";
     const statusText = resp && resp.statusText ? String(resp.statusText) : "";
     const label = [status, statusText].filter(Boolean).join(" ");
-    return label ? `${fallback} (${label})` : fallback;
+    return label ? `${AdminI18n.t(fallback)} (${label})` : AdminI18n.t(fallback);
 }
 
 function reportAgentFolderFailure(message) {
@@ -277,9 +278,9 @@ function loadAgentFolders(email) {
             note.className = "text-body-secondary";
             const tokenForm = document.getElementById("agent-token-form");
             const requireAcl = tokenForm !== null && tokenForm.dataset.requireFolderAcl === "true";
-            note.textContent = requireAcl
+            note.textContent = AdminI18n.t(requireAcl
                 ? "This user has no folders. Create a folder in the vault, or turn off the folder allowlist requirement."
-                : "This user has no folders. The token can still see eligible personal logins.";
+                : "This user has no folders. The token can still see eligible personal logins.");
             list.appendChild(note);
         } else {
             if (actions) {
@@ -368,8 +369,12 @@ function createScopedCredential(url, body) {
 }
 
 // Bootstrap Theme Selector
-const getStoredTheme = () => localStorage.getItem("theme");
-const setStoredTheme = theme => localStorage.setItem("theme", theme);
+const getStoredTheme = () => {
+    try { return localStorage.getItem("theme"); } catch (_) { return null; }
+};
+const setStoredTheme = theme => {
+    try { localStorage.setItem("theme", theme); } catch (_) { /* Keep this page usable without storage. */ }
+};
 
 const getPreferredTheme = () => {
     const storedTheme = getStoredTheme();
@@ -377,7 +382,7 @@ const getPreferredTheme = () => {
         return storedTheme;
     }
 
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return "light";
 };
 
 const setTheme = theme => {
@@ -419,7 +424,7 @@ const showActiveTheme = (theme, focus = false) => {
         activeThemeIcon.setAttribute("xlink:href", iconHref);
     }
 
-    const themeSwitcherLabel = `${themeSwitcherText.textContent} (${btnToActive.dataset.bsThemeValue})`;
+    const themeSwitcherLabel = `${themeSwitcherText.textContent} (${AdminI18n.t({ light: "Light", dark: "Dark", auto: "Auto" }[theme])})`;
     themeSwitcher.setAttribute("aria-label", themeSwitcherLabel);
 
     if (focus) {
@@ -553,7 +558,7 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
         button.addEventListener("click", () => {
             const kind = button.getAttribute("data-agent-revoke");
             const id = button.getAttribute("data-agent-id");
-            if (!id || !confirm("Revoke this credential?")) {
+            if (!id || !confirm(AdminI18n.t("Revoke this credential?"))) {
                 return;
             }
             const path = kind === "fill" ? "fill-agents" : "tokens";
@@ -562,7 +567,7 @@ document.addEventListener("DOMContentLoaded", (/*event*/) => {
     });
 
     // get current URL path and assign "active" class to the correct nav-item
-    const pathname = window.location.pathname;
+    const pathname = window.location.pathname.replace(/\/+$/, "");
     if (pathname === "") return;
     const navItem = document.querySelectorAll(`.navbar-nav .nav-item a[href="${pathname}"]`);
     if (navItem.length === 1) {

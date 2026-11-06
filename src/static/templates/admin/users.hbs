@@ -1,42 +1,43 @@
 <main class="container-xxl">
-    <div id="users-block" class="my-3 p-3 rounded shadow">
-        <h6 class="border-bottom pb-2 mb-3">Registered Users</h6>
-        <div class="table-responsive-xl small">
+    <header class="admin-page-header"><h1 data-i18n="Users">Users</h1><p data-i18n="Manage accounts, invitations and access.">Manage accounts, invitations and access.</p></header>
+    <div id="users-block" class="admin-panel">
+        <h2 class="admin-section-title" data-i18n="Registered Users">Registered Users</h2>
+        <div class="table-responsive small">
             <table id="users-table" class="table table-sm table-striped table-hover">
                 <thead>
                     <tr>
-                        <th class="vw-account-details">User</th>
+                        <th class="vw-account-details" data-i18n="User">User</th>
                         {{#if sso_enabled}}
-                        <th class="vw-sso-identifier">SSO Identifier</th>
+                        <th class="vw-sso-identifier" data-i18n="SSO Identifier">SSO Identifier</th>
                         {{/if}}
-                        <th class="vw-created-at">Created at</th>
-                        <th class="vw-last-active">Last Active</th>
-                        <th class="vw-entries">Entries</th>
-                        <th class="vw-attachments">Attachments</th>
-                        <th class="vw-organizations">Organizations</th>
-                        <th class="vw-actions text-end">Actions</th>
+                        <th class="vw-created-at" data-i18n="Created at">Created at</th>
+                        <th class="vw-last-active" data-i18n="Last Active">Last Active</th>
+                        <th class="vw-entries" data-i18n="Entries">Entries</th>
+                        <th class="vw-attachments" data-i18n="Attachments">Attachments</th>
+                        <th class="vw-organizations" data-i18n="Organizations">Organizations</th>
+                        <th class="vw-actions text-end" data-i18n="Actions">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {{#each page_data}}
                     <tr>
                         <td>
-                            <svg width="48" height="48" class="float-start me-2 rounded" data-jdenticon-value="{{email}}">
+                            <svg width="48" height="48" class="float-start me-2 rounded" data-jdenticon-value="{{email}}"></svg>
                             <div>
                                 <strong>{{name}}</strong>
                                 <span class="d-block">{{email}}</span>
                                 <span class="d-block">
                                     {{#unless user_enabled}}
-                                        <span class="badge bg-danger me-2" title="User is disabled">Disabled</span>
+                                        <span class="badge bg-danger me-2" title="User is disabled" data-i18n-title="User is disabled" data-i18n="Disabled">Disabled</span>
                                     {{/unless}}
                                     {{#if twoFactorEnabled}}
-                                        <span class="badge bg-success me-2" title="2FA is enabled">2FA</span>
+                                        <span class="badge bg-success me-2" title="2FA is enabled" data-i18n-title="2FA is enabled" data-i18n="2FA">2FA</span>
                                     {{/if}}
                                     {{#case _status 1}}
-                                        <span class="badge bg-warning text-dark me-2" title="User is invited">Invited</span>
+                                        <span class="badge bg-warning text-dark me-2" title="User is invited" data-i18n-title="User is invited" data-i18n="Invited">Invited</span>
                                     {{/case}}
                                     {{#if emailVerified}}
-                                        <span class="badge bg-success me-2" title="Email has been verified">Verified</span>
+                                        <span class="badge bg-success me-2" title="Email has been verified" data-i18n-title="Email has been verified" data-i18n="Verified">Verified</span>
                                     {{/if}}
                                 </span>
                             </div>
@@ -56,9 +57,9 @@
                             <span class="d-block">{{cipher_count}}</span>
                         </td>
                         <td>
-                            <span class="d-block"><strong>Amount:</strong> {{attachment_count}}</span>
+                            <span class="d-block"><strong><span data-i18n="Amount:">Amount:</span></strong> {{attachment_count}}</span>
                             {{#if attachment_count}}
-                            <span class="d-block"><strong>Size:</strong> {{attachment_size}}</span>
+                            <span class="d-block"><strong><span data-i18n="Size:">Size:</span></strong> {{attachment_size}}</span>
                             {{/if}}
                         </td>
                         <td>
@@ -71,20 +72,20 @@
                         <td class="text-end px-1 small">
                             <span data-vw-user-uuid="{{id}}" data-vw-user-email="{{email}}">
                                 {{#if twoFactorEnabled}}
-                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-remove2fa>Remove all 2FA</button><br>
+                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-remove2fa data-i18n="Remove all 2FA">Remove all 2FA</button><br>
                                 {{/if}}
-                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-deauth-user>Deauthorize sessions</button><br>
-                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-delete-user>Delete User</button><br>
+                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-deauth-user data-i18n="Deauthorize sessions">Deauthorize sessions</button><br>
+                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-delete-user data-i18n="Delete User">Delete User</button><br>
                                 {{#if ../sso_enabled}}
-                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-delete-sso-user>Delete SSO Association</button><br>
+                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-delete-sso-user data-i18n="Delete SSO Association">Delete SSO Association</button><br>
                                 {{/if}}
                                 {{#if user_enabled}}
-                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-disable-user>Disable User</button><br>
+                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-disable-user data-i18n="Disable User">Disable User</button><br>
                                 {{else}}
-                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-enable-user>Enable User</button><br>
+                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-enable-user data-i18n="Enable User">Enable User</button><br>
                                 {{/if}}
                                 {{#case _status 1}}
-                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-resend-user-invite>Resend invite</button><br>
+                                <button type="button" class="btn btn-sm btn-link p-0 border-0 float-right" vw-resend-user-invite data-i18n="Resend invite">Resend invite</button><br>
                                 {{/case}}
                             </span>
                         </td>
@@ -96,22 +97,22 @@
 
         <div class="mt-3 clearfix">
             <button type="button" class="btn btn-sm btn-danger" id="updateRevisions"
-                title="Force all clients to fetch new data next time they connect. Useful after restoring a backup to remove any stale data.">
-                Force clients to resync
+                title="Force all clients to fetch new data next time they connect. Useful after restoring a backup to remove any stale data." data-i18n-title="Force all clients to fetch new data next time they connect. Useful after restoring a backup to remove any stale data.">
+                <span data-i18n="Force clients to resync">Force clients to resync</span>
             </button>
 
-            <button type="button" class="btn btn-sm btn-primary float-end" id="reload">Reload users</button>
+            <button type="button" class="btn btn-sm btn-primary float-end" id="reload" data-i18n="Reload users">Reload users</button>
         </div>
     </div>
 
-    <div id="inviteUserFormBlock" class="align-items-center p-3 mb-3 text-white-50 bg-secondary rounded shadow">
+    <div id="inviteUserFormBlock" class="admin-panel">
         <div>
-            <h6 class="mb-0 text-white">Invite User</h6>
-            <small>Email:</small>
+            <h2 class="admin-section-title" data-i18n="Invite User">Invite User</h2>
+            <label class="form-label" for="inviteEmail" data-i18n="Email">Email</label>
 
-            <form class="form-inline input-group w-50" id="inviteUserForm">
-                <input type="email" class="form-control me-2" id="inviteEmail" placeholder="Enter email" required spellcheck="false">
-                <button type="submit" class="btn btn-primary">Invite</button>
+            <form class="form-inline input-group admin-invite-form" id="inviteUserForm">
+                <input type="email" class="form-control me-2" id="inviteEmail" placeholder="Enter email" required spellcheck="false" data-i18n-placeholder="Enter email">
+                <button type="submit" class="btn btn-primary" data-i18n="Invite">Invite</button>
             </form>
         </div>
     </div>
@@ -121,30 +122,30 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h6 class="modal-title">
-                        <b>Update User Type:</b><br><b>Organization:</b> <span id="userOrgTypeDialogOrgName"></span><br><b>User:</b> <span id="userOrgTypeDialogUserEmail"></span>
+                        <b><span data-i18n="Update User Type:">Update User Type:</span></b><br><b><span data-i18n="Organization:">Organization:</span></b> <span id="userOrgTypeDialogOrgName"></span><br><b><span data-i18n="User:">User:</span></b> <span id="userOrgTypeDialogUserEmail"></span>
                     </h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" data-i18n-aria-label="Close"></button>
                 </div>
                 <form class="form" id="userOrgTypeForm">
                     <input type="hidden" name="user_uuid" id="userOrgTypeUserUuid" value="">
                     <input type="hidden" name="org_uuid" id="userOrgTypeOrgUuid" value="">
                     <div class="modal-body">
                         <div class="radio">
-                            <label><input type="radio" value="2" class="form-radio-input" name="user_type" id="userOrgTypeUser">&nbsp;User</label>
+                            <label><input type="radio" value="2" class="form-radio-input" name="user_type" id="userOrgTypeUser">&nbsp;<span data-i18n="User">User</span></label>
                         </div>
                         <div class="radio">
-                            <label><input type="radio" value="3" class="form-radio-input" name="user_type" id="userOrgTypeManager">&nbsp;Manager</label>
+                            <label><input type="radio" value="3" class="form-radio-input" name="user_type" id="userOrgTypeManager">&nbsp;<span data-i18n="Manager">Manager</span></label>
                         </div>
                         <div class="radio">
-                            <label><input type="radio" value="1" class="form-radio-input" name="user_type" id="userOrgTypeAdmin">&nbsp;Admin</label>
+                            <label><input type="radio" value="1" class="form-radio-input" name="user_type" id="userOrgTypeAdmin">&nbsp;<span data-i18n="Admin">Admin</span></label>
                         </div>
                         <div class="radio">
-                            <label><input type="radio" value="0" class="form-radio-input" name="user_type" id="userOrgTypeOwner">&nbsp;Owner</label>
+                            <label><input type="radio" value="0" class="form-radio-input" name="user_type" id="userOrgTypeOwner">&nbsp;<span data-i18n="Owner">Owner</span></label>
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-sm btn-primary">Change Role</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" data-i18n="Cancel">Cancel</button>
+                        <button type="submit" class="btn btn-sm btn-primary" data-i18n="Change Role">Change Role</button>
                     </div>
                 </form>
             </div>
