@@ -1,48 +1,49 @@
 <main class="container-xxl">
+    <header class="admin-page-header"><h1 data-i18n="Settings">Settings</h1><p data-i18n="Configure your Vaultwarden instance.">Configure your Vaultwarden instance.</p></header>
     <div id="admin_token_warning" class="alert alert-warning alert-dismissible fade show d-none">
-        <button type="button" class="btn-close" data-bs-target="admin_token_warning" data-bs-dismiss="alert" aria-label="Close"></button>
-        You are using a plain text `ADMIN_TOKEN` which is insecure.<br>
-        Please generate a secure Argon2 PHC string by using `vaultwarden hash` or `argon2`.<br>
-        See: <a href="https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page#secure-the-admin_token" target="_blank" rel="noopener noreferrer">Enabling admin page - Secure the `ADMIN_TOKEN`</a>
+        <button type="button" class="btn-close" data-bs-target="admin_token_warning" data-bs-dismiss="alert" aria-label="Close" data-i18n-aria-label="Close"></button>
+        <span data-i18n="You are using a plain text `ADMIN_TOKEN` which is insecure.">You are using a plain text `ADMIN_TOKEN` which is insecure.</span><br>
+        <span data-i18n="Please generate a secure Argon2 PHC string by using `vaultwarden hash` or `argon2`.">Please generate a secure Argon2 PHC string by using `vaultwarden hash` or `argon2`.</span><br>
+        <span data-i18n="See:">See:</span> <a href="https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page#secure-the-admin_token" target="_blank" rel="noopener noreferrer" data-i18n="Enabling admin page - Secure the `ADMIN_TOKEN`">Enabling admin page - Secure the `ADMIN_TOKEN`</a>
     </div>
-    <div id="config-block" class="align-items-center p-3 mb-3 bg-secondary rounded shadow">
+    <div id="config-block" class="admin-panel">
         <div>
-            <h6 class="text-white mb-3">Configuration</h6>
-            <div class="small text-white mb-3">
-                <span class="font-weight-bolder">NOTE:</span> The settings here override the environment variables. Once saved, it's recommended to stop setting them to avoid confusion.<br>
-                This does not apply to the read-only section, which can only be set via environment variables.<br>
-                Settings which are overridden are shown with <span class="is-overridden-true alert-row px-1">a yellow colored background</span>.
+            <h2 class="admin-section-title" data-i18n="Configuration">Configuration</h2>
+            <div class="admin-notice small mb-4">
+                <span class="font-weight-bolder" data-i18n="NOTE:">NOTE:</span> <span data-i18n="The settings here override the environment variables. Once saved, it&#x27;s recommended to stop setting them to avoid confusion.">The settings here override the environment variables. Once saved, it's recommended to stop setting them to avoid confusion.</span><br>
+                <span data-i18n="This does not apply to the read-only section, which can only be set via environment variables.">This does not apply to the read-only section, which can only be set via environment variables.</span><br>
+                <span data-i18n="Settings which are overridden are shown with">Settings which are overridden are shown with</span> <span class="is-overridden-true alert-row px-1" data-i18n="a yellow colored background">a yellow colored background</span>.
             </div>
 
             <form class="form needs-validation" id="config-form" novalidate>
                 {{#each page_data.config}}
                 {{#if groupdoc}}
                 <div class="card mb-3">
-                    <button id="b_{{group}}" type="button" class="card-header text-start btn btn-link text-decoration-none" aria-expanded="false" aria-controls="g_{{group}}" data-bs-toggle="collapse" data-bs-target="#g_{{group}}">{{groupdoc}}</button>
+                    <button id="b_{{group}}" type="button" class="card-header text-start btn btn-link text-decoration-none" aria-expanded="false" aria-controls="g_{{group}}" data-bs-toggle="collapse" data-bs-target="#g_{{group}}" data-i18n="{{groupdoc}}">{{groupdoc}}</button>
                     <div id="g_{{group}}" class="card-body collapse">
                         {{#each elements}}
                         {{#if editable}}
-                        <div class="row my-2 align-items-center is-overridden-{{overridden}} alert-row" title="[{{name}}] {{doc.description}}">
+                        <div class="row my-2 align-items-center is-overridden-{{overridden}} alert-row" title="[{{name}}] {{doc.description}}" data-i18n-config-description="{{name}}">
                             {{#case type "text" "number" "password"}}
-                            <label for="input_{{name}}" class="col-sm-3 col-form-label">{{doc.name}}</label>
+                            <label for="input_{{name}}" class="col-sm-3 col-form-label"><span data-i18n-config-name="{{name}}">{{doc.name}}</span></label>
                             <div class="col-sm-8">
                                 <div class="input-group">
                                 <input class="form-control conf-{{type}}" id="input_{{name}}" type="{{type}}"
-                                    name="{{name}}" value="{{value}}" {{#if default}} placeholder="Default: {{default}}"{{/if}}>
+                                    name="{{name}}" value="{{value}}" {{#if default}} data-i18n-default="{{default}}" placeholder="Default: {{default}}"{{/if}}>
                                 {{#case type "password"}}
-                                    <button class="btn btn-outline-secondary input-group-text" type="button" data-vw-pw-toggle="input_{{name}}">Show/hide</button>
+                                    <button class="btn btn-outline-secondary input-group-text" type="button" data-vw-pw-toggle="input_{{name}}" data-i18n="Show/hide">Show/hide</button>
                                 {{/case}}
                                 </div>
                             </div>
                             {{/case}}
                             {{#case type "checkbox"}}
-                            <div class="col-sm-3 col-form-label">{{doc.name}}</div>
+                            <div class="col-sm-3 col-form-label"><span data-i18n-config-name="{{name}}">{{doc.name}}</span></div>
                             <div class="col-sm-8">
                                 <div class="form-check">
                                     <input class="form-check-input conf-{{type}}" type="checkbox" id="input_{{name}}"
                                         name="{{name}}" {{#if value}} checked {{/if}}>
 
-                                    <label class="form-check-label" for="input_{{name}}"> Default: {{default}} </label>
+                                    <label class="form-check-label" for="input_{{name}}"> <span data-i18n="Default:">Default:</span> {{default}} </label>
                                 </div>
                             </div>
                             {{/case}}
@@ -50,12 +51,12 @@
                         {{/if}}
                         {{/each}}
                         {{#case group "smtp"}}
-                            <div class="row my-2 align-items-center pt-3 border-top" title="Send a test email to given email address">
-                                <label for="smtp-test-email" class="col-sm-3 col-form-label">Test SMTP</label>
+                            <div class="row my-2 align-items-center pt-3 border-top" title="Send a test email to given email address" data-i18n-title="Send a test email to given email address">
+                                <label for="smtp-test-email" class="col-sm-3 col-form-label" data-i18n="Test SMTP">Test SMTP</label>
                                 <div class="col-sm-8 input-group">
-                                    <input class="form-control" id="smtp-test-email" type="email" placeholder="Enter test email" required spellcheck="false">
-                                    <button type="button" class="btn btn-outline-primary input-group-text" id="smtpTest">Send test email</button>
-                                    <div class="invalid-tooltip">Please provide a valid email address</div>
+                                    <input class="form-control" id="smtp-test-email" type="email" placeholder="Enter test email" required spellcheck="false" data-i18n-placeholder="Enter test email">
+                                    <button type="button" class="btn btn-outline-primary input-group-text" id="smtpTest" data-i18n="Send test email">Send test email</button>
+                                    <div class="invalid-tooltip" data-i18n="Please provide a valid email address">Please provide a valid email address</div>
                                 </div>
                             </div>
                         {{/case}}
@@ -66,20 +67,20 @@
 
                 <div class="card mb-3">
                     <button id="b_readonly" type="button" class="card-header text-start btn btn-link text-decoration-none" aria-expanded="false" aria-controls="g_readonly"
-                            data-bs-toggle="collapse" data-bs-target="#g_readonly">Read-Only Config</button>
+                            data-bs-toggle="collapse" data-bs-target="#g_readonly" data-i18n="Read-Only Config">Read-Only Config</button>
                     <div id="g_readonly" class="card-body collapse">
                         <div class="small mb-3">
-                            NOTE: These options can't be modified in the editor because they would require the server
+                            <span data-i18n="NOTE: These options can&#x27;t be modified in the editor because they would require the server to be restarted. To modify them, you need to set the correct environment variables when launching the server. You can check the variable names in the tooltips of each option.">NOTE: These options can't be modified in the editor because they would require the server
                             to be restarted. To modify them, you need to set the correct environment variables when
-                            launching the server. You can check the variable names in the tooltips of each option.
+                            launching the server. You can check the variable names in the tooltips of each option.</span>
                         </div>
 
                         {{#each page_data.config}}
                         {{#each elements}}
                         {{#unless editable}}
-                        <div class="row my-2 align-items-center alert-row" title="[{{name}}] {{doc.description}}">
+                        <div class="row my-2 align-items-center alert-row" title="[{{name}}] {{doc.description}}" data-i18n-config-description="{{name}}">
                             {{#case type "text" "number" "password"}}
-                            <label for="input_{{name}}" class="col-sm-3 col-form-label">{{doc.name}}</label>
+                            <label for="input_{{name}}" class="col-sm-3 col-form-label"><span data-i18n-config-name="{{name}}">{{doc.name}}</span></label>
                             <div class="col-sm-8">
                                 <div class="input-group">
                                 {{!--
@@ -88,25 +89,25 @@
                                       And sometimes this is more useful for providing support than just 3 asterisk.
                                 --}}
                                 {{#if (eq name "database_url")}}
-                                    <input readonly class="form-control" id="input_{{name}}" type="password" value="{{value}}" {{#if default}} placeholder="Default: {{default}}" {{/if}}>
-                                    <button class="btn btn-outline-secondary" type="button" data-vw-pw-toggle="input_{{name}}">Show/hide</button>
+                                    <input readonly class="form-control" id="input_{{name}}" type="password" value="{{value}}" {{#if default}} data-i18n-default="{{default}}" placeholder="Default: {{default}}" {{/if}}>
+                                    <button class="btn btn-outline-secondary" type="button" data-vw-pw-toggle="input_{{name}}" data-i18n="Show/hide">Show/hide</button>
                                 {{else}}
-                                    <input readonly class="form-control" id="input_{{name}}" type="{{type}}" value="{{value}}" {{#if default}} placeholder="Default: {{default}}" {{/if}} spellcheck="false">
+                                    <input readonly class="form-control" id="input_{{name}}" type="{{type}}" value="{{value}}" {{#if default}} data-i18n-default="{{default}}" placeholder="Default: {{default}}" {{/if}} spellcheck="false">
                                     {{#case type "password"}}
-                                    <button class="btn btn-outline-secondary" type="button" data-vw-pw-toggle="input_{{name}}">Show/hide</button>
+                                    <button class="btn btn-outline-secondary" type="button" data-vw-pw-toggle="input_{{name}}" data-i18n="Show/hide">Show/hide</button>
                                     {{/case}}
                                 {{/if}}
                                 </div>
                             </div>
                             {{/case}}
                             {{#case type "checkbox"}}
-                            <div class="col-sm-3 col-form-label">{{doc.name}}</div>
+                            <div class="col-sm-3 col-form-label"><span data-i18n-config-name="{{name}}">{{doc.name}}</span></div>
                             <div class="col-sm-8">
                                 <div class="form-check align-middle">
                                     <input disabled class="form-check-input" type="checkbox" id="input_{{name}}"
                                         {{#if value}} checked {{/if}}>
 
-                                    <label class="form-check-label" for="input_{{name}}"> Default: {{default}} </label>
+                                    <label class="form-check-label" for="input_{{name}}"> <span data-i18n="Default:">Default:</span> {{default}} </label>
                                 </div>
                             </div>
                             {{/case}}
@@ -121,36 +122,24 @@
                 {{#if page_data.can_backup}}
                 <div class="card mb-3">
                     <button id="b_database" type="button" class="card-header text-start btn btn-link text-decoration-none" aria-expanded="false" aria-controls="g_database"
-                            data-bs-toggle="collapse" data-bs-target="#g_database">Backup Database</button>
+                            data-bs-toggle="collapse" data-bs-target="#g_database" data-i18n="Backup Database">Backup Database</button>
                     <div id="g_database" class="card-body collapse">
                         <div class="small mb-3">
-                            WARNING: This function only creates a backup copy of the SQLite database.
+                            <span data-i18n="WARNING: This function only creates a backup copy of the SQLite database. This does not include any configuration or file attachment data that may also be needed to fully restore a vaultwarden instance. For details on how to perform complete backups, refer to the wiki page on">WARNING: This function only creates a backup copy of the SQLite database.
                             This does not include any configuration or file attachment data that may
                             also be needed to fully restore a vaultwarden instance. For details on
-                            how to perform complete backups, refer to the wiki page on
-                            <a href="https://github.com/dani-garcia/vaultwarden/wiki/Backing-up-your-vault" target="_blank" rel="noopener noreferrer">backups</a>.
+                            how to perform complete backups, refer to the wiki page on</span>
+                            <a href="https://github.com/dani-garcia/vaultwarden/wiki/Backing-up-your-vault" target="_blank" rel="noopener noreferrer" data-i18n="backups">backups</a>.
                         </div>
-                        <button type="button" class="btn btn-primary" id="backupDatabase">Backup Database</button>
+                        <button type="button" class="btn btn-primary" id="backupDatabase" data-i18n="Backup Database">Backup Database</button>
                     </div>
                 </div>
                 {{/if}}
 
-                <button type="submit" class="btn btn-primary">Save</button>
-                <button type="button" class="btn btn-danger float-end" id="deleteConf">Reset defaults</button>
+                <div class="admin-form-actions"><button type="submit" class="btn btn-primary" data-i18n="Save">Save</button>
+                <button type="button" class="btn btn-outline-danger" id="deleteConf" data-i18n="Reset defaults">Reset defaults</button></div>
             </form>
         </div>
     </div>
 </main>
-<style>
-    #config-block ::placeholder {
-        /* Most modern browsers support this now. */
-        color: orangered;
-    }
-
-    .is-overridden-true {
-        --bs-alert-color: #664d03;
-        --bs-alert-bg: #fff3cd;
-        --bs-alert-border-color: #ffecb5;
-    }
-</style>
 <script src="{{urlpath}}/vw_static/admin_settings.js"></script>
