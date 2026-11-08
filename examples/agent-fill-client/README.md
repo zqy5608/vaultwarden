@@ -83,7 +83,8 @@ Password-reprompt items can appear in the list and cannot be filled.
 ```bash
 export VW_BASE_URL=https://vault.bo0lean.com
 export VW_FILL_TOKEN='vwfill_<64 hex characters>'
-export BW_USER_KEY='<BW_SESSION from bw unlock>'
+# BW_USER_KEY must already be supplied privately by the trusted operator process.
+# It is the decrypted account encryption key, not BW_SESSION.
 
 python3 fill_agent.py pending
 python3 fill_agent.py poll --reveal
@@ -132,12 +133,7 @@ Exit status is `1` when decryption was attempted and failed. The JSON is still p
 
 ## Decrypting
 
-`BW_USER_KEY` is the unlocked user symmetric key: 64 raw bytes, standard base64, base64url, or hex. Bitwarden CLI prints that value as `BW_SESSION` from `bw unlock`. Put it only in the fill process:
-
-```bash
-bw unlock
-export BW_USER_KEY="$BW_SESSION"
-```
+`BW_USER_KEY` is the decrypted account encryption key: 64 raw bytes, standard base64, base64url, or hex. It is **not** Bitwarden CLI's `BW_SESSION`, which is a separately generated session key. The MCP setup below authenticates the vault account and unwraps the account key locally; it does not require manually exporting a key. Advanced callers of the legacy fill CLI must supply the actual account key privately to that trusted process.
 
 Those 64 bytes are a 32-byte AES-256 key followed by a 32-byte HMAC-SHA256 key. A 32-byte value is accepted only for legacy type-0 fields.
 
@@ -147,6 +143,7 @@ This client does not derive a key from the master password (no PBKDF2 or Argon2)
 - the 32-byte stretched master key
 - the encrypted account key (`2.iv|ct|mac` stored on the user)
 - either agent bearer token
+- Bitwarden CLI's `BW_SESSION`
 
 Modern vaults encrypt fields as Bitwarden EncString type 2:
 
@@ -198,8 +195,7 @@ python3 publish_uri.py publish --email you@example.com --all
 export VW_USER_TOKEN='<vault user access token>'
 python3 publish_uri.py put --item <cipher-uuid> --uri https://example.com/login
 
-# Unlocked key from `bw unlock`, plus the same user access token:
-export BW_USER_KEY="$BW_SESSION"
+# Actual account key supplied privately, plus the same user access token:
 python3 publish_uri.py publish --item <cipher-uuid>
 
 python3 publish_uri.py clear --item <cipher-uuid>
@@ -256,6 +252,9 @@ access to the trusted process's files or memory can bypass this boundary;
 deploy the trusted server on a separate OS account/host when that isolation is
 required. Never expose its private browser through another MCP/CDP tool.
 
+For the dedicated-account deployment, restricted SSH entry point and production
+acceptance gates, see [production setup](../../docs/agent-mcp-production.md).
+
 ### Install
 
 Python 3.11+ is required for the MCP extra. The standalone reference scripts
@@ -282,12 +281,19 @@ Admin. In your own terminal, run the non-echoing setup command:
 "$HOME/.local/share/vaultwarden-agent/venv/bin/vaultwarden-agent-setup" --sites /absolute/path/sites.json
 ```
 
-Setup asks for the server origin, both scoped credentials, the Fill Agent UUID
-and the unlocked user symmetric key. It writes an operator-owned 0600 file in
+Setup asks for the server origin, vault account email/master password, both
+scoped credentials and the Fill Agent UUID. It reuses the normal prelogin/KDF
+authentication flow and unwraps the account encryption key locally. Vault
+two-step authentication is handled by the existing login helper; the website's
+own MFA is outside the browser integration. Neither the master password nor
+normal user access token is saved. Setup writes an operator-owned 0600 file in
 the private `~/.config/vaultwarden-agent` directory. It refuses redirected input
 and existing destination files. Run setup outside the AI transcript; never send
 those values to the model. Passwords and wrapped item keys must use authenticated
 type-2 encryption. Configuration, traces and vault data do not belong in Git.
+Use `--headless` on a trusted Linux host without a display. For credential
+rotation, create a new private config path with `--config`, validate it, and
+have the operator switch the deployed path; setup never overwrites a file.
 
 Register the command with Codex without copying secrets into its configuration:
 

@@ -90,8 +90,8 @@ def load_user_key(material: str) -> bytes:
 
     Accepts standard base64, base64url, or hex. The decoded length must be
     64 bytes (AES-256 key || HMAC-SHA256 key) or 32 bytes (legacy AES key).
-    This is the same material as Bitwarden CLI ``BW_SESSION`` after
-    ``bw unlock``, not the master password and not an encrypted key blob.
+    This is the decrypted account encryption key, not a master password,
+    encrypted key blob or Bitwarden CLI ``BW_SESSION``.
     """
 
     text = material.strip()
@@ -103,7 +103,7 @@ def load_user_key(material: str) -> bytes:
     if re.fullmatch(r"\d\..+", compact):
         raise BitwardenCryptoError(
             "value looks like a Bitwarden EncString. Pass the unlocked raw "
-            "key (base64 of 64 bytes), such as BW_SESSION from `bw unlock`, "
+            "account key (base64 of 64 bytes), "
             "not the encrypted key stored on the account"
         )
     if re.fullmatch(r"[0-9a-fA-F]{64}|[0-9a-fA-F]{128}", compact):
@@ -115,7 +115,7 @@ def load_user_key(material: str) -> bytes:
     if len(raw) not in (32, 64):
         raise BitwardenCryptoError(
             "user key must decode to 32 or 64 bytes. Pass base64 or hex of "
-            "the unlocked symmetric key from `bw unlock` (BW_SESSION). "
+            "the decrypted account encryption key, not BW_SESSION. "
             "A master password or the 32-byte stretched master key will not "
             "decrypt type 2 vault fields"
         )

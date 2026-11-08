@@ -6,13 +6,20 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import getpass
 import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from browser_broker import BrokerError, BrowserBroker, read_config, validate_config
+from browser_broker import (
+    BrokerError,
+    BrowserBroker,
+    origin,
+    read_config,
+    validate_config,
+)
 
 DEFAULT_CONFIG = Path.home() / ".config/vaultwarden-agent/config.json"
 
@@ -76,6 +83,18 @@ def main() -> None:
     create_server(args.config).run(transport="stdio")
 
 
+def unlock_user_key(server: str, email: str, password: str) -> str:
+    """Authenticate privately and unwrap the account key; never use BW_SESSION."""
+    from publish_uri import login
+
+    if server.rstrip("/") != origin(server, local=True):
+        raise BrokerError("invalid_server")
+    session = login(
+        server.rstrip("/"), email.strip().lower(), password, 15, need_key=True
+    )
+    return base64.b64encode(session["user_key"]).decode("ascii")
+
+
 def setup() -> None:
     parser = argparse.ArgumentParser(
         description="Privately configure credentials; never run inside an AI transcript."
@@ -84,18 +103,25 @@ def setup() -> None:
         "--sites", type=Path, required=True, help="operator-approved site profiles JSON"
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--headless", action="store_true", help="run without a display")
     args = parser.parse_args()
     if not os.isatty(0) or not os.isatty(2):
         parser.error("setup requires your own interactive terminal")
-    config = {
-        "server_url": input("Vaultwarden HTTPS origin: ").strip(),
-        "agent_token": getpass.getpass("AI-scoped token: ").strip(),
-        "fill_token": getpass.getpass("Fill-scoped token: ").strip(),
-        "fill_agent_id": input("Fill agent UUID: ").strip(),
-        "user_key": getpass.getpass("Unlocked user symmetric key: ").strip(),
-        "sites": json.loads(args.sites.read_text()),
-    }
     try:
+        if args.config.exists() or args.config.is_symlink():
+            raise BrokerError("config_already_exists")
+        server = input("Vaultwarden HTTPS origin: ").strip().rstrip("/")
+        email = input("Vault account email: ").strip().lower()
+        user_key = unlock_user_key(server, email, getpass.getpass("Master password: "))
+        config = {
+            "server_url": server,
+            "agent_token": getpass.getpass("AI-scoped token: ").strip(),
+            "fill_token": getpass.getpass("Fill-scoped token: ").strip(),
+            "fill_agent_id": input("Fill agent UUID: ").strip(),
+            "user_key": user_key,
+            "sites": json.loads(args.sites.read_text()),
+            "headless": args.headless,
+        }
         validate_config(config)
         args.config.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if args.config.parent.is_symlink():
@@ -113,7 +139,7 @@ def setup() -> None:
             handle.write(encoded)
     except Exception:
         parser.error(
-            "configuration was not saved; check the profile and private destination"
+            "configuration was not saved; check vault authentication, the profile and private destination"
         )
     print("Private configuration saved. Restart the MCP connection to load it.")
 

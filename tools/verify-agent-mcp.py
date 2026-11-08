@@ -29,6 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "examples/agent-fill-client"))
+from agent_mcp import unlock_user_key
 from bw_kdf import derive_master_key, master_password_hash, stretch_master_key
 from publish_uri import login_form
 
@@ -346,12 +347,13 @@ def main():
             body={"userEmail": email, "name": "Browser verification"},
         )
         private_values.extend([agent["token"], fill["token"]])
+        stage = "unlock_account_key"
         config = {
             "server_url": base,
             "agent_token": agent["token"],
             "fill_token": fill["token"],
             "fill_agent_id": fill["id"],
-            "user_key": base64.b64encode(user_key).decode(),
+            "user_key": unlock_user_key(base, email, master_password),
             "headless": True,
             "sites": {
                 "public-demo": {
@@ -365,6 +367,9 @@ def main():
                 }
             },
         }
+        assert config["user_key"] == base64.b64encode(user_key).decode(), (
+            "account_unlock_failed"
+        )
         config_path = runtime / "config.json"
         fd = os.open(config_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as handle:
@@ -381,6 +386,7 @@ def main():
             "vaultwarden": "real disposable server",
             "encrypted_item": "type-2 with wrapped item key",
             "uri_index": "published through user API",
+            "account_key_unlock": "normal authentication and local unwrap",
             "target": "https://the-internet.herokuapp.com",
             **result,
         }
