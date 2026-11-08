@@ -27,6 +27,19 @@ and its runtime dependencies. Keep code, the venv and browser binaries root-owne
 and not writable by the broker. Put browsers in
 `/opt/vaultwarden-agent/browsers` using `PLAYWRIGHT_BROWSERS_PATH` during install.
 
+Chromium's native sandbox is enabled. On Ubuntu 24.04, allow user namespaces
+for the root-owned browser executable with an AppArmor profile, then load it
+with `apparmor_parser -r`. Do not disable the global user-namespace restriction
+or pass `--no-sandbox`. For this dedicated install, the profile is:
+
+```text
+abi <abi/4.0>,
+include <tunables/global>
+profile vaultwarden-agent-chromium /opt/vaultwarden-agent/browsers/**/chrome-headless-shell flags=(unconfined) {
+  userns,
+}
+```
+
 Use an unprivileged system account `vaultwarden-agent`, no sudo access, locked
 password, shell `/bin/sh`, home `/var/lib/vaultwarden-agent`. The home must be
 **root-owned 0755** so the broker cannot replace its SSH authorization directory.
@@ -97,5 +110,6 @@ service, data, backup and SMTP configuration are independent of this client.
 ## References
 
 - [OpenSSH authorized_keys restrictions](https://man.openbsd.org/sshd#AUTHORIZED_KEYS_FILE_FORMAT)
+- [Ubuntu user namespace restrictions](https://documentation.ubuntu.com/release-notes/24.04/#unprivileged-user-namespace-restrictions)
 - [Bitwarden CLI session-key generation](https://github.com/bitwarden/clients/blob/main/apps/cli/src/key-management/commands/unlock.command.ts)
 - [MCP contract and acceptance](agent-mcp-spec.md)
