@@ -12,5 +12,8 @@ data
 # Environment file
 .env
 
+# Local Python package installation metadata
+examples/agent-fill-client/*.egg-info/
+
 # Web vault
 web-vault
