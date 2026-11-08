@@ -137,7 +137,9 @@ class BrowserGuardTests(unittest.IsolatedAsyncioTestCase):
         from playwright.async_api import async_playwright
 
         self.engine = await async_playwright().start()
-        self.browser = await self.engine.chromium.launch(headless=True)
+        self.browser = await self.engine.chromium.launch(
+            headless=True, chromium_sandbox=True
+        )
         self.context = await self.browser.new_context(service_workers="block")
         self.page = await self.context.new_page()
         self.html = """<form method='post' action='/authenticate'>

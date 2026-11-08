@@ -231,7 +231,7 @@ class BrowserBroker:
 
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch(
-            headless=self.config.get("headless", False)
+            headless=self.config.get("headless", False), chromium_sandbox=True
         )
 
     async def _authenticated(self, page, site: dict) -> bool:
