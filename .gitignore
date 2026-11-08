@@ -12,5 +12,9 @@ data
 # Environment file
 .env
 
+# Local Python package build artifacts
+examples/agent-fill-client/*.egg-info/
+examples/agent-fill-client/build/
+
 # Web vault
 web-vault

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vaultwarden-agent"
+version = "0.1.0"
+description = "Scoped Vaultwarden credentials and trusted browser login over MCP"
+requires-python = ">=3.11"
+dependencies = ["cryptography>=41.0.7", "argon2-cffi>=23.1.0"]
+
+[project.optional-dependencies]
+mcp = ["mcp==2.3.0", "playwright==1.64.1"]
+
+[project.scripts]
+vaultwarden-agent-mcp = "agent_mcp:main"
+vaultwarden-agent-setup = "agent_mcp:setup"
+
+[tool.setuptools]
+py-modules = ["agent_http", "ai_agent", "fill_agent", "bw_crypto", "bw_kdf", "publish_uri", "browser_broker", "agent_mcp"]
