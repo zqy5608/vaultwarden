@@ -6,7 +6,7 @@ redeem body stays in this process. Passwords and TOTP seeds are printed only
 with --reveal or VW_REVEAL_PLAINTEXT=1.
 
 Decryption is local. Set BW_USER_KEY to the unlocked user symmetric key
-(base64 from `bw unlock`, the BW_SESSION value). The server cannot decrypt,
+(the decrypted account encryption key, not BW_SESSION). The server cannot decrypt,
 and this script never sends the key anywhere.
 """
 
