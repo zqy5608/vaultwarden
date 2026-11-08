@@ -30,6 +30,18 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/agent-client"
           "$RUNNER_TEMP/agent-client/bin/pip" install './examples/agent-fill-client[mcp]'
           "$RUNNER_TEMP/agent-client/bin/python" -m playwright install --with-deps --only-shell chromium
+      - name: Allow Chromium sandbox user namespaces
+        run: |
+          if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" = 1 ]; then
+            cat <<EOF | sudo tee /etc/apparmor.d/vaultwarden-agent-ci >/dev/null
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile vaultwarden-agent-ci $HOME/.cache/ms-playwright/**/chrome-headless-shell flags=(unconfined) {
+            userns,
+          }
+          EOF
+            sudo apparmor_parser -r /etc/apparmor.d/vaultwarden-agent-ci
+          fi
       - name: Check reference clients and MCP credential boundaries
         run: |
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_client.py
