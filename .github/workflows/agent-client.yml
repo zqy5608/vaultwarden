@@ -1,0 +1,37 @@
+name: Agent client
+permissions: {}
+
+on:
+  push:
+    paths:
+      - "examples/agent-fill-client/**"
+      - "tools/verify-agent-mcp.py"
+      - ".github/workflows/agent-client.yml"
+  pull_request:
+    paths:
+      - "examples/agent-fill-client/**"
+      - "tools/verify-agent-mcp.py"
+      - ".github/workflows/agent-client.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-client:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the packaged client and private browser
+        run: |
+          python3 -m venv "$RUNNER_TEMP/agent-client"
+          "$RUNNER_TEMP/agent-client/bin/pip" install './examples/agent-fill-client[mcp]'
+          "$RUNNER_TEMP/agent-client/bin/python" -m playwright install --with-deps --only-shell chromium
+      - name: Check reference clients and MCP credential boundaries
+        run: |
+          "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_client.py
+          "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_publish.py
+          "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_mcp.py
