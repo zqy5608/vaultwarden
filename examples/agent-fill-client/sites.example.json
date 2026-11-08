@@ -1,0 +1,11 @@
+{
+  "example-login": {
+    "item_id": "00000000-0000-4000-8000-000000000001",
+    "login_url": "https://login.example.com/login",
+    "username_selector": "input[autocomplete=username]",
+    "password_selector": "input[type=password]",
+    "submit_selector": "button[type=submit]",
+    "success_selector": "a[href='/logout']",
+    "success_path": "/account"
+  }
+}

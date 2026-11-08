@@ -240,3 +240,94 @@ python3 examples/agent-fill-client/test_publish.py
 ```
 
 Crypto tests build EncStrings with OpenSSL AES-256-CBC and check HMAC-SHA256 in the test, then decrypt through `bw_crypto.py`. The CLI tests run the scripts against a local stand-in and assert that stdout never contains a password, a redeem secret, or a fill token. `test_publish.py` also checks that `publish_uri.py` sends websites only.
+
+## Codex MCP and private browser login
+
+The optional MCP package logs in through a browser owned by the trusted MCP
+server. The AI selects a configured site; it cannot supply a URL, selector,
+password or script. The server returns fixed states, not the redeem body, DOM,
+screenshots, cookies, browser errors or page text. The original reference CLIs
+above retain their existing output contracts and are not used as MCP tools.
+
+This is a username/password login integration. It does not automate MFA,
+passkeys, cross-origin SSO, or arbitrary actions after login. The approved
+website necessarily receives its own password. An unrestricted agent with
+access to the trusted process's files or memory can bypass this boundary;
+deploy the trusted server on a separate OS account/host when that isolation is
+required. Never expose its private browser through another MCP/CDP tool.
+
+### Install
+
+Python 3.11+ is required for the MCP extra. The standalone reference scripts
+still support Python 3.9+.
+
+```bash
+python3.13 -m venv "$HOME/.local/share/vaultwarden-agent/venv"
+"$HOME/.local/share/vaultwarden-agent/venv/bin/pip" install './examples/agent-fill-client[mcp]'
+"$HOME/.local/share/vaultwarden-agent/venv/bin/python" -m playwright install chromium
+```
+
+Copy `sites.example.json` to your own operator configuration and replace the
+item UUID, exact HTTPS login URL, form selectors, post-login path and success
+selector. All three form elements must belong to the same visible top-level
+POST form, with a same-origin action. A success path alone is insufficient;
+choose a selector that exists only after authentication. Cross-origin network
+requests, popups, downloads, WebSockets and service workers are blocked.
+
+Publish the item's URI index using **Agent sites** or `publish_uri.py` first.
+Create a narrowly scoped AI token and a separate Fill Agent credential in
+Admin. In your own terminal, run the non-echoing setup command:
+
+```bash
+"$HOME/.local/share/vaultwarden-agent/venv/bin/vaultwarden-agent-setup" --sites /absolute/path/sites.json
+```
+
+Setup asks for the server origin, both scoped credentials, the Fill Agent UUID
+and the unlocked user symmetric key. It writes an operator-owned 0600 file in
+the private `~/.config/vaultwarden-agent` directory. It refuses redirected input
+and existing destination files. Run setup outside the AI transcript; never send
+those values to the model. Passwords and wrapped item keys must use authenticated
+type-2 encryption. Configuration, traces and vault data do not belong in Git.
+
+Register the command with Codex without copying secrets into its configuration:
+
+```bash
+codex mcp add vaultwarden-agent -- "$HOME/.local/share/vaultwarden-agent/venv/bin/vaultwarden-agent-mcp"
+codex mcp get vaultwarden-agent
+```
+
+Reload the MCP connection after installation or configuration changes. A missing
+or invalid private configuration exposes the tool catalog but returns
+`not_configured`. The tools are:
+
+| Tool | Input | Output |
+| --- | --- | --- |
+| `vault_sites` | none | Approved site identifiers and origins |
+| `vault_login` | `site` | Fixed authenticated/failed state and a bounded reason code |
+| `vault_status` | `site` | Verified authentication state without page contents |
+
+Browser sessions stay in memory for the MCP process lifetime; they are not
+exported or saved to disk. Failed submissions are not retried automatically.
+Debug logging is rejected before browser startup. Authentication is reported
+only when both the configured origin/path and post-login selector match.
+
+### Verify the complete flow
+
+```bash
+"$HOME/.local/share/vaultwarden-agent/venv/bin/python" examples/agent-fill-client/test_mcp.py
+"$HOME/.local/share/vaultwarden-agent/venv/bin/python" tools/verify-agent-mcp.py --vaultwarden-binary /absolute/path/vaultwarden --report /absolute/path/report.json
+```
+
+The second command creates a private, disposable local Vaultwarden instance,
+registers a user through the normal API, stores type-2 encrypted demo credentials
+with a wrapped item key, publishes the URI index, creates scoped credentials,
+and uses the actual MCP stdio transport to log in to the external HTTPS
+demonstration at `the-internet.herokuapp.com`. Demo values are read and used
+inside the trusted verifier; they are never printed. MCP output and diagnostics
+are scanned for credentials and keys. It terminates its browser and local
+server. A private temporary directory is retained for operator diagnosis; move
+it to your system trash after inspection. This does not validate a personal
+website/account or touch production vault data.
+
+Implementation scope and the threat model are in
+[`docs/agent-mcp-spec.md`](../../docs/agent-mcp-spec.md).

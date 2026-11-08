@@ -141,3 +141,14 @@ The same settings appear in the admin config page and `.env.template`.
 A Python client for this flow is in [`examples/agent-fill-client`](../examples/agent-fill-client/README.md). Run `ai_agent.py` with the `vwagent_` token and `fill_agent.py` with the `vwfill_` token in a separate process. The fill script redeems one ticket and, when `BW_USER_KEY` is set to the unlocked user symmetric key, decrypts login fields locally. The AI process never receives the fill token or the redeem body.
 
 `fillAgentId` is the UUID in the Id column on `/admin/agents`, not the `vwfill_` secret. Create fill returns `Origin not allowed` until a URI index is published with `PUT /api/agent/items/<id>/uri-index` using the vault user's access token. The example does not publish that index.
+
+## Trusted browser MCP integration
+
+The optional [`vaultwarden-agent` MCP package](../examples/agent-fill-client/README.md#codex-mcp-and-private-browser-login)
+uses these same endpoints and decryption helpers. Its trusted server owns a
+private browser and exposes only operator-approved site listing, login and
+authentication status. It never returns the fill CLI's JSON, login fields,
+page contents, cookies or screenshots to the AI. Site profiles bind credentials
+to an exact HTTPS origin and POST form, and authentication requires a separate
+post-login path and element check. See the [implementation specification](agent-mcp-spec.md)
+for acceptance checks and the OS/host isolation boundary.
