@@ -74,6 +74,41 @@ are a trust decision, not a promise that arbitrary websites are safe.
 6. Existing reference-client and URI-publishing tests continue to pass. Close
    test browsers/servers and retain only non-secret verification summaries.
 
+## Production rollout acceptance
+
+The production setup must obtain the account encryption key by authenticating
+the vault user and unwrapping the encrypted account key locally, using the
+existing prelogin/KDF/login helpers. Bitwarden CLI `BW_SESSION` is a separately
+generated session key; it is not an account encryption key. The operator enters
+the master password only in their own non-echoing terminal. Neither that password
+nor a normal user access token is persisted in the MCP configuration.
+
+Deploy the trusted process and private browser under a dedicated, unprivileged
+account on the existing Oracle host. The Codex SSH key must have a forced MCP
+command and forwarding/PTY/user-rc restrictions; it must not grant a remote shell,
+file transfer, or access to an administrator's SSH key. Keep application code and
+SSH authorization root-owned, and the runtime config private to the broker.
+Do not alter the running Vaultwarden service, its data, or backup configuration.
+
+Production is complete only after all of these checks pass:
+
+1. Setup obtains a real account key through the normal authentication flow;
+   master password, login token and account key do not appear in diagnostics.
+2. Existing client checks and new onboarding checks pass. The external HTTPS
+   verifier uses the new account-unlock path, not an injected generated key.
+3. The deployed limited SSH identity can initialize/call MCP, but cannot obtain
+   a shell, transfer files, forward ports or read the private configuration.
+4. The user selects a personal website and vault entry. Publish its exact URI,
+   issue a folder-limited AI credential and independent fill credential, then
+   configure the profile through the operator's private terminal.
+5. Current Codex tools return the approved site and authenticate the selected
+   account. Verify retained status, a denied site and credential revocation.
+   Record versions, checks and rollback without copying any secret values.
+
+The first release still supports username/password forms only. A production
+target requiring MFA, passkeys or cross-origin SSO needs a separate explicit
+design; do not silently disable that site's account protections.
+
 ## Sources
 
 - [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
