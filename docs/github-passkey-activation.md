@@ -20,15 +20,18 @@ the 1Password original. The copy has not been performed. Native-provider
 calibration must pass before asking the operator to confirm the transfer.
 
 Current calibration: the pinned official extension 2026.10.0 opened successfully
-under UID 995 on Oracle with full Chromium, Xvfb and native sandboxing. CI now
-passes validated loopback TLS, official vault login, native passkey registration
-and cancellation of the master-password prompt. Assertion verification remains
-blocked; a response alone is not accepted as successful authentication. Only
-synthetic credentials and disposable loopback vaults have been used. Renewed
-operator access confirmed production healthy, both loopback health endpoints
-HTTP 200, and the old temporary container no longer running.
+under UID 995 on Oracle with full Chromium and native sandboxing. CI passes
+validated loopback TLS, official vault login, real passkey registration and
+required-verification assertion, prompt cancellation, matching account and
+retained session. The same real broker then passes native login through stdio
+MCP, session reuse across independent clients, denied-site and secret-output
+checks. Only synthetic credentials and disposable loopback vaults were used.
+Renewed operator access confirmed production healthy, both loopback health
+endpoints HTTP 200, and the old temporary container no longer running. A new
+backup succeeded. Private Unix VNC and loopback TLS prerequisites are staged;
+personal credentials have not been enrolled.
 
-The native environment failure has a confirmed cause: the official 2026.10.0
+The initial native environment failure had a confirmed cause: the official 2026.10.0
 extension rejects HTTP self-hosted URLs outside development builds. Do not
 remove that validator or disable certificate verification. Calibrate a pinned
 Caddy TLS proxy bound only to loopback, trusting its public CA only in the
@@ -60,11 +63,11 @@ Before any transfer:
    cannot transfer that passkey, stop; do not fall back to a plaintext export or
    create a replacement credential without separate approval.
 
-Then implement and calibrate the native Bitwarden passkey provider in the
-isolated browser. This is not provided by the current password-only MCP release.
-Confirm its vault permissions and private operator-verification path before
-unlocking it with real credentials. Keep keys with the native provider; do not
-load a production private key into a testing virtual authenticator.
+The native Bitwarden provider is now implemented and calibrated in the isolated
+browser. It is not part of the currently installed password-only 0.1.2 release.
+Install the tested client and verify the private operator channel before real
+enrollment. Keep keys with the native provider; do not load a production private
+key into a testing virtual authenticator.
 
 Acceptance still requires a fresh GitHub passkey login through the current
 Codex MCP, the correct authenticated account, retained status, denied-site and
@@ -123,9 +126,10 @@ account mismatch and unapproved origins. Then deploy and verify the private UI,
 complete the approved native copy, and accept a fresh GitHub login from this chat.
 
 The shared broker and native control plane are implemented for version 0.1.3;
-all 61 local checks pass. Draft PR #12 remains unmerged and undeployed while
-native cryptographic verification and the operator UI are completed. Real
-GitHub acceptance remains unfinished. Production still runs client 0.1.2.
+all 63 client checks and final PR CI pass, including the full native verifier.
+PR #12 has not yet been merged or deployed at this source checkpoint. Production
+still runs client 0.1.2. Private account registration, the approved one-item copy
+and real current-chat GitHub acceptance remain unfinished.
 
 ## Alternative not selected
 

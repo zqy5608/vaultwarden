@@ -137,20 +137,23 @@ design; do not silently disable that site's account protections.
   public-demo test and remote MCP connectivity checks remain separate evidence.
 
 After restarting Codex, all three tools were called directly over restricted
-Oracle SSH and returned `not_configured`. A later native-calibration SSH
-interruption closed the original current-chat transport. A fresh independent
-restricted MCP session still initializes and returns `not_configured`; this does
-not re-establish the original chat connection or prove a personal login.
+Oracle SSH and returned `not_configured`. A later interruption closed that
+transport. A new direct `vault_sites` call in this chat now again returns normal
+`not_configured`, resolving transport availability for that call. Personal login
+and current-chat activation of the new native runtime remain separate gates.
 
-Draft PR #12 adds shared broker state and a native provider control plane; all 61
-local checks pass. It remains unmerged and undeployed. The source provider is
+PR #12 adds shared broker state and a native provider control plane; all 63
+client checks and final native PR CI pass. It remains unmerged and undeployed at
+this source checkpoint. The source provider is
 1Password; the one-item native copy is approved but not performed. The user also
 approved a dedicated Vaultwarden account containing only that item. Native UI
-launch passed on Oracle/Xvfb. CI passes loopback TLS, vault login, native passkey
-registration and prompt cancellation; assertion verification is still blocked.
+launch passed on Oracle. CI passes validated TLS, vault login, real native passkey
+registration/required-verification assertion, cancellation, account matching,
+retained session and actual native MCP login across independent clients.
 Renewed operator access confirmed production healthy, both loopback health
-endpoints HTTP 200 and the old disposable container no longer running. Private
-operator enrollment and real GitHub login remain unfinished.
+endpoints HTTP 200 and the old disposable container no longer running. A fresh
+backup succeeded. The private VNC/TLS prerequisites are staged; private operator
+enrollment and real GitHub login remain unfinished.
 
 ## Sources
 
