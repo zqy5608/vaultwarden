@@ -415,6 +415,9 @@ class BrowserBroker:
         await (route.continue_() if allowed else route.abort())
 
     async def _native_status(self, name: str, site: dict) -> dict:
+        if name in self.pending and time.monotonic() >= self.pending[name]:
+            await self.close()
+            return {"status": "failed", "reason": "approval_expired", "site": name}
         session = self.sessions.get(name)
         if session and await self._authenticated(session[1], site):
             if name not in self.native_verified:
@@ -427,9 +430,6 @@ class BrowserBroker:
             self.pending.pop(name, None)
             return {"status": "authenticated", "site": name}
         if name in self.pending:
-            if time.monotonic() >= self.pending[name]:
-                await self.close()
-                return {"status": "failed", "reason": "approval_expired", "site": name}
             return {"status": "needs_approval", "site": name}
         return {"status": "not_authenticated", "site": name}
 

@@ -150,6 +150,18 @@ class NativeBrowserTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["reason"], "provider_verification_unconfirmed")
         self.assertFalse(self.broker.sessions)
 
+    async def test_late_confirmation_cannot_bypass_approval_expiry(self):
+        await self.broker.login("example")
+        self.broker.native_verified.add("example")
+        self.broker.pending["example"] = 0
+        await self.broker.sessions["example"][1].goto(
+            "https://login.example.test/account"
+        )
+        self.assertEqual(
+            (await self.broker.status("example"))["reason"], "approval_expired"
+        )
+        self.assertFalse(self.broker.sessions)
+
     async def test_reflected_native_errors_never_cross_boundary(self):
         await self.broker.login("example")
         sentinel = secrets.token_urlsafe(40)
