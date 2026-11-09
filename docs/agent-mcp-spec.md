@@ -8,18 +8,22 @@ Chromium browser. The model chooses an operator-approved site, and receives only
 site identifiers, origins and fixed execution states. No server API, database
 schema, official-client behavior or existing CLI output contract changes.
 
-The initial acceptance target was the public The Internet login demonstration. A disposable local
-Vaultwarden instance supplies real encrypted vault items and scoped credentials;
-the login itself must reach the external HTTPS website and verify its logged-in
-state. A mocked HTTP response is not sufficient for this acceptance check.
+The acceptance target is now the owned Oracle test service at
+`https://agent-test.bo0lean.com`, replacing external demonstrations and personal
+GitHub login. A disposable vault supplies real encrypted test items and scoped
+credentials. Verify actual password login and native passkey signatures on the
+server; mocked HTTP responses do not satisfy acceptance. Follow the
+[owned-site plan](agent-test-site-plan.md) for deployment and current-chat gates.
 
-The user has now selected the personal production target: GitHub account
+The earlier personal target was GitHub account
 `zqy5608`, entry `Github`, using a passkey stored in **1Password**. Do not assume
 this credential already exists in Vaultwarden. Version 0.1.2's username/password
 integration does not satisfy this acceptance. 1Password's official Agents
 integration currently excludes passkeys. The user approved a native encrypted
 copy of only this item into Vaultwarden, retaining the 1Password original.
-The copy has not been performed; native-provider calibration comes first.
+The operator reports completing that copy privately; it has not been independently
+inspected. Preserve the item and its original; do not repeat the import. Use an
+independent test credential for the owned site's distinct RP ID.
 
 ## Trust boundary
 

@@ -1,5 +1,15 @@
 # GitHub passkey activation decision
 
+## Current acceptance scope
+
+The user selected `https://agent-test.bo0lean.com` on Oracle to test the plugin
+without an external website. That owned RP replaces personal GitHub login as the
+release acceptance target. Keep the copied GitHub item and 1Password original
+intact; neither can be used for a different RP ID. The following GitHub notes are
+historical operational context. Use the [owned-site plan](agent-test-site-plan.md)
+for current work. Do not restart a personal GitHub approval while testing the new
+site or infer a successful GitHub login from owned-site results.
+
 ## Confirmed target and current state
 
 - Site: `https://github.com`; account: `zqy5608`; item name: `Github`.

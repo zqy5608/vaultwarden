@@ -1,0 +1,7 @@
+credentials-file: /run/secrets/tunnel.json
+loglevel: warn
+metrics: 127.0.0.1:2000
+ingress:
+  - hostname: agent-test.bo0lean.com
+    service: http://test-site:18082
+  - service: http_status:404

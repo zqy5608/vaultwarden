@@ -340,6 +340,7 @@ class BrowserBroker:
             str(profile),
             channel="chromium",
             headless=False,
+            no_viewport=True,
             chromium_sandbox=True,
             accept_downloads=False,
             service_workers="block",

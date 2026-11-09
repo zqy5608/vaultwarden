@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise MCP -> disposable Vaultwarden -> real public HTTPS login, without secret output."""
+"""Exercise MCP -> disposable Vaultwarden -> owned HTTPS login, without secret output."""
 
 # Verifier failures are reduced to fixed stages so fixture secrets never enter diagnostics.
 # ruff: noqa: BLE001
@@ -24,7 +24,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,25 +46,6 @@ def encrypt(key: bytes, value: bytes) -> str:
     return "2." + "|".join(
         base64.b64encode(part).decode() for part in (iv, ciphertext, mac)
     )
-
-
-class DemoCredentials(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.inside = False
-        self.values: list[str] = []
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "em":
-            self.inside = True
-
-    def handle_endtag(self, tag):
-        if tag == "em":
-            self.inside = False
-
-    def handle_data(self, data):
-        if self.inside:
-            self.values.append(data.strip())
 
 
 def request(opener, url, method="GET", *, body=None, form=None, token=None):
@@ -95,6 +75,67 @@ def request(opener, url, method="GET", *, body=None, form=None, token=None):
         raise RuntimeError("request_failed") from None
 
 
+def password_config(
+    opener,
+    base,
+    *,
+    user_token,
+    item_id,
+    email,
+    master_password,
+    user_key,
+    admin,
+    site_origin,
+    private_values,
+    headless=True,
+):
+    """Provision only the disposable user's scoped password fixture."""
+    request(
+        opener,
+        base + "/api/agent/items/" + item_id + "/uri-index",
+        "PUT",
+        token=user_token,
+        body={"uris": [{"uri": site_origin + "/login", "match": 1}]},
+    )
+    request(opener, base + "/admin/", "POST", form={"token": admin})
+    agent = request(
+        opener,
+        base + "/admin/agent/tokens",
+        "POST",
+        body={"userEmail": email, "name": "Owned RP verification"},
+    )
+    fill = request(
+        opener,
+        base + "/admin/agent/fill-agents",
+        "POST",
+        body={"userEmail": email, "name": "Owned RP browser"},
+    )
+    private_values.extend([agent["token"], fill["token"]])
+    config = {
+        "server_url": base,
+        "agent_token": agent["token"],
+        "fill_token": fill["token"],
+        "fill_agent_id": fill["id"],
+        "user_key": unlock_user_key(base, email, master_password),
+        "headless": headless,
+        "sites": {
+            "agent-test": {
+                "item_id": item_id,
+                "login_url": site_origin + "/login",
+                "username_selector": "#input-email",
+                "password_selector": "#password",
+                "submit_selector": "#password-submit",
+                "success_selector": "#profile",
+                "success_path": "/profile",
+            }
+        },
+    }
+    assert config["user_key"] == base64.b64encode(user_key).decode(), (
+        "account_unlock_failed"
+    )
+    return config
+
+
 async def call_mcp(config_path, diagnostics, secret_values):
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
@@ -106,6 +147,16 @@ async def call_mcp(config_path, diagnostics, secret_values):
             "PATH": os.environ.get("PATH", ""),
             "HOME": str(Path.home()),
             "PYTHONDONTWRITEBYTECODE": "1",
+            **{
+                name: os.environ[name]
+                for name in (
+                    "DISPLAY",
+                    "XAUTHORITY",
+                    "PLAYWRIGHT_BROWSERS_PATH",
+                    "XDG_CONFIG_HOME",
+                )
+                if name in os.environ
+            },
         },
     )
     transcripts = []
@@ -134,9 +185,9 @@ async def call_mcp(config_path, diagnostics, secret_values):
         }
         for tool, arguments in [
             ("vault_sites", {}),
-            ("vault_status", {"site": "public-demo"}),
-            ("vault_login", {"site": "public-demo"}),
-            ("vault_status", {"site": "public-demo"}),
+            ("vault_status", {"site": "agent-test"}),
+            ("vault_login", {"site": "agent-test"}),
+            ("vault_status", {"site": "agent-test"}),
             ("vault_login", {"site": "not-approved"}),
         ]:
             result = await client.call_tool(tool, arguments)
@@ -144,9 +195,17 @@ async def call_mcp(config_path, diagnostics, secret_values):
             results[
                 tool + ("-denied" if arguments.get("site") == "not-approved" else "")
             ] = view(result)
+        if results["vault_login"]["status"] != "authenticated":
+            raise RuntimeError(
+                results["vault_login"].get("reason", "external_login_not_confirmed")
+            )
+        assert results["vault_status"]["status"] == "authenticated", (
+            "retained_session_not_confirmed"
+        )
+        assert results["vault_login-denied"]["status"] == "site_not_allowed"
         concurrent = await asyncio.gather(
-            client.call_tool("vault_login", {"site": "public-demo"}),
-            client.call_tool("vault_login", {"site": "public-demo"}),
+            client.call_tool("vault_login", {"site": "agent-test"}),
+            client.call_tool("vault_login", {"site": "agent-test"}),
         )
         for result in concurrent:
             transcripts.append(result.model_dump_json())
@@ -160,14 +219,6 @@ async def call_mcp(config_path, diagnostics, secret_values):
     assert all(value not in wire + captured for value in secret_values), (
         "secret_output_detected"
     )
-    if results["vault_login"]["status"] != "authenticated":
-        raise RuntimeError(
-            results["vault_login"].get("reason", "external_login_not_confirmed")
-        )
-    assert results["vault_status"]["status"] == "authenticated", (
-        "retained_session_not_confirmed"
-    )
-    assert results["vault_login-denied"]["status"] == "site_not_allowed"
     return {
         "mcp_transport": "stdio",
         "tool_count": len(catalog.tools),
@@ -185,26 +236,30 @@ def main():
         "--vaultwarden-binary", type=Path, default=ROOT / "target/debug/vaultwarden"
     )
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--site-origin", default="https://agent-test.bo0lean.com")
     args = parser.parse_args()
     runtime = Path(tempfile.mkdtemp(prefix="vaultwarden-mcp-verification-")).resolve()
     runtime.chmod(0o700)
     process = None
-    stage = "public_demo"
+    stage = "owned_test_account"
     private_values = []
     report = {"status": "failed"}
     log_path = runtime / "vaultwarden.log"
     try:
-        with urllib.request.urlopen(
-            "https://the-internet.herokuapp.com/login", timeout=30
-        ) as response:
-            assert (
-                urllib.parse.urlsplit(response.url).hostname
-                == "the-internet.herokuapp.com"
-            )
-            demo = DemoCredentials()
-            demo.feed(response.read(1_048_576).decode())
-        assert len(demo.values) == 2, "demo_credentials_unavailable"
-        username, password = demo.values
+        site_origin = args.site_origin
+        parsed_origin = urllib.parse.urlsplit(site_origin)
+        assert parsed_origin.scheme == "https" and parsed_origin.hostname in {
+            "agent-test.bo0lean.com",
+            "localhost",
+        }
+        assert (
+            not parsed_origin.path
+            and not parsed_origin.query
+            and not parsed_origin.fragment
+            and not parsed_origin.username
+        )
+        username = "password-" + secrets.token_hex(8)
+        password = secrets.token_urlsafe(32)
         admin = secrets.token_urlsafe(48)
         master_password = secrets.token_urlsafe(48)
         user_key = secrets.token_bytes(64)
@@ -215,6 +270,16 @@ def main():
             master_password,
             base64.b64encode(user_key).decode(),
         ]
+        site_opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
+        )
+        site_opener.addheaders = [("Origin", site_origin)]
+        request(
+            site_opener,
+            site_origin + "/register",
+            "POST",
+            body={"username": username, "password": password},
+        )
         stage = "local_vaultwarden_start"
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
@@ -309,9 +374,7 @@ def main():
                     "password": encrypt(item_key, password.encode()),
                     "uris": [
                         {
-                            "uri": encrypt(
-                                item_key, b"https://the-internet.herokuapp.com/login"
-                            ),
+                            "uri": encrypt(item_key, (site_origin + "/login").encode()),
                             "match": 1,
                         }
                     ],
@@ -319,56 +382,18 @@ def main():
             },
         )
         item_id = cipher["id"]
-        stage = "publish_uri_index"
-        request(
+        stage = "scoped_password_setup"
+        config = password_config(
             opener,
-            base + "/api/agent/items/" + item_id + "/uri-index",
-            "PUT",
-            token=user_token,
-            body={
-                "uris": [
-                    {"uri": "https://the-internet.herokuapp.com/login", "match": 1}
-                ]
-            },
-        )
-        stage = "authenticate_disposable_admin"
-        request(opener, base + "/admin/", "POST", form={"token": admin})
-        stage = "create_scoped_credentials"
-        agent = request(
-            opener,
-            base + "/admin/agent/tokens",
-            "POST",
-            body={"userEmail": email, "name": "MCP verification"},
-        )
-        fill = request(
-            opener,
-            base + "/admin/agent/fill-agents",
-            "POST",
-            body={"userEmail": email, "name": "Browser verification"},
-        )
-        private_values.extend([agent["token"], fill["token"]])
-        stage = "unlock_account_key"
-        config = {
-            "server_url": base,
-            "agent_token": agent["token"],
-            "fill_token": fill["token"],
-            "fill_agent_id": fill["id"],
-            "user_key": unlock_user_key(base, email, master_password),
-            "headless": True,
-            "sites": {
-                "public-demo": {
-                    "item_id": item_id,
-                    "login_url": "https://the-internet.herokuapp.com/login",
-                    "username_selector": "#username",
-                    "password_selector": "#password",
-                    "submit_selector": "button[type=submit]",
-                    "success_selector": "a[href='/logout']",
-                    "success_path": "/secure",
-                }
-            },
-        }
-        assert config["user_key"] == base64.b64encode(user_key).decode(), (
-            "account_unlock_failed"
+            base,
+            user_token=user_token,
+            item_id=item_id,
+            email=email,
+            master_password=master_password,
+            user_key=user_key,
+            admin=admin,
+            site_origin=site_origin,
+            private_values=private_values,
         )
         config_path = runtime / "config.json"
         fd = os.open(config_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -387,7 +412,7 @@ def main():
             "encrypted_item": "type-2 with wrapped item key",
             "uri_index": "published through user API",
             "account_key_unlock": "normal authentication and local unwrap",
-            "target": "https://the-internet.herokuapp.com",
+            "target": site_origin,
             **result,
         }
     except Exception as exc:
