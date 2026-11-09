@@ -490,10 +490,11 @@ def main() -> int:
                 for name in package.namelist()
             )
             package.extractall(extension)
-        trusted_extension = Path("/opt") / (
+        trusted_extension = Path("/usr/lib") / (
             "vaultwarden-native-fixture-" + secrets.token_hex(8)
         )
         command(["sudo", "cp", "-R", str(extension), str(trusted_extension)])
+        command(["sudo", "chmod", "-R", "go-w", str(trusted_extension)])
         extension = trusted_extension
         suffix = secrets.token_hex(5)
         vault, proxy = "vw-native-" + suffix, "vw-native-tls-" + suffix
@@ -626,6 +627,12 @@ def main() -> int:
             }
             else "other"
         )
+        if type(error).__name__ == "BrokerError" and str(error) in {
+            "trusted_native_files_required",
+            "private_native_runtime_required",
+            "debug_logging_disabled",
+        }:
+            report["failure_reason"] = str(error)
         if stage == "assertion_verification":
             report["response_body_unavailable"] = any(
                 marker in str(error)
