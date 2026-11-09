@@ -201,6 +201,34 @@ class NativeBrowserTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertTrue(blocked)
 
+    async def test_operator_can_enroll_only_at_the_approved_site(self):
+        from playwright.async_api import Error
+
+        page = await self.context.new_page()
+        await page.goto("https://login.example.test/register")
+        self.assertTrue(
+            await page.evaluate(
+                "() => fetch('/registration/options', {method:'POST', body:'synthetic'}).then(r=>r.ok)"
+            )
+        )
+        for url in [
+            "https://unapproved.example.test/steal",
+            "https://assets.example.test/steal",
+        ]:
+            self.assertTrue(
+                await page.evaluate(
+                    "url => fetch(url, {method:'POST', body:'synthetic'}).then(()=>false,()=>true)",
+                    url,
+                )
+            )
+        other = await self.context.new_page()
+        with self.assertRaises(Error):
+            await other.goto("https://unapproved.example.test/login")
+        self.assertFalse(self.broker.sessions)
+        self.assertEqual(
+            (await self.broker.status("example"))["status"], "not_authenticated"
+        )
+
     async def test_mutable_extension_is_rejected_before_provider_start(self):
         with tempfile.TemporaryDirectory() as root:
             extension = Path(root) / "extension"

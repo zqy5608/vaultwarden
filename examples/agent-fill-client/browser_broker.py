@@ -405,11 +405,16 @@ class BrowserBroker:
                     # The native provider owns vault authentication; MCP never handles it.
                     allowed = True
                 else:
-                    for name, (_, page) in self.sessions.items():
-                        if frame.page is page:
-                            site = self.config["sites"][name]
-                            target = origin(request.url)
-                            allowed = target == origin(site["login_url"]) or (
+                    target = origin(request.url)
+                    for site in self.config["sites"].values():
+                        expected = origin(site["login_url"])
+                        # Private enrollment also uses operator-opened approved pages.
+                        if (
+                            frame.parent_frame is None
+                            and request.is_navigation_request()
+                            and target == expected
+                        ) or origin(frame.page.url) == expected:
+                            allowed = target == expected or (
                                 target in site["resource_origins"]
                                 and request.method == "GET"
                                 and request.resource_type
