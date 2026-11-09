@@ -10,6 +10,7 @@ on:
       - "tools/verify-agent-native.py"
       - "tools/agent-*.sh"
       - "tools/agent-native-*"
+      - "tools/agent-automation-*"
       - "tools/vaultwarden-agent-*.service"
       - ".github/workflows/agent-client.yml"
   pull_request:
@@ -20,6 +21,7 @@ on:
       - "tools/verify-agent-native.py"
       - "tools/agent-*.sh"
       - "tools/agent-native-*"
+      - "tools/agent-automation-*"
       - "tools/vaultwarden-agent-*.service"
       - ".github/workflows/agent-client.yml"
 
@@ -55,10 +57,12 @@ jobs:
       - name: Check reference clients and MCP credential boundaries
         run: |
           sh -n tools/agent-mcp-ssh.sh tools/agent-native-display.sh tools/agent-native-broker.sh
+          docker compose -f tools/agent-automation-compose.yml config --quiet
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_client.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_publish.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_mcp.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_setup.py
+          "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_automation.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_broker_rpc.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_native.py
           "$RUNNER_TEMP/agent-client/bin/python" -m unittest discover -s examples/agent-test-site -p 'test_*.py'
