@@ -112,6 +112,9 @@ class NativeBrowserTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             (await self.broker.status("example"))["status"], "needs_approval"
         )
+        self.assertTrue(
+            await self.broker.sessions["example"][1].evaluate("document.hasFocus()")
+        )
         operator = await self.context.new_page()
         await operator.goto(self.broker.native_extension_origin + "/confirmation")
         await self.broker._watch_native_verification(operator)

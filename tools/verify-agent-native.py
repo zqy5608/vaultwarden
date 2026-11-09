@@ -330,6 +330,7 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
             )
             rp = broker.sessions.get("webauthn")
             if rp and not rp[1].is_closed():
+                native_ui["rp_focused"] = await rp[1].evaluate("document.hasFocus()")
                 body = (await rp[1].locator("body").inner_text()).lower()
                 native_ui["rp_error_categories"] = [
                     value

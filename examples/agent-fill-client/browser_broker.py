@@ -452,6 +452,8 @@ class BrowserBroker:
                 "popup", lambda popup: asyncio.create_task(self._quiet_close(popup))
             )
             await page.goto(site["login_url"], wait_until="domcontentloaded")
+            # The native provider waits for document focus before opening confirmation.
+            await page.bring_to_front()
             button = page.locator(site["passkey_selector"])
             if (
                 origin(page.url) != origin(site["login_url"])
