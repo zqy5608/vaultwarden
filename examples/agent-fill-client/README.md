@@ -358,7 +358,7 @@ unapproved destinations and cross-origin credential submissions remain blocked.
 and completes native confirmation. `vault_status` checks the post-login path,
 visible success element and expected account selector. It also requires the
 provider's password-confirmation field to have appeared for this pending request;
-it never reads its value. Approval expires after two minutes and closes the
+it never reads its value. Approval expires after five minutes and closes the
 private browser. Do not automate confirmation for a personal credential.
 
 One native site per runtime keeps confirmation bound to the requested site.

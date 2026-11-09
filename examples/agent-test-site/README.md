@@ -67,3 +67,7 @@ re-prompt. Sign out before MCP acceptance. Keep the existing GitHub item intact.
 Set the broker's approved origin, selectors and expected test username using
 private operator metadata; do not send the password, passkey or session to Codex.
 Retire temporary administrator SSH signing access before private credential entry.
+
+The broker approval, browser WebAuthn request and server challenge all allow five
+minutes for remote private confirmation. Challenges still expire, are consumed
+once, and require the expected origin, RP and native user verification.

@@ -2,8 +2,10 @@
 
 import secrets
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from agent_test_site import COOKIE, create_app, database
@@ -89,6 +91,7 @@ class SiteTests(unittest.TestCase):
         response = self.client.post("/registration/options", headers=self.headers)
         self.assertEqual(response.status_code, 200)
         options = response.json()
+        self.assertEqual(options["timeout"], 300000)
         self.assertEqual(options["rp"]["id"], "agent-test.example.test")
         self.assertEqual(options["user"]["name"], self.username)
         self.assertEqual(options["authenticatorSelection"]["residentKey"], "required")
@@ -136,6 +139,24 @@ class SiteTests(unittest.TestCase):
         )
         self.assertEqual(bad.json(), {"verified": False})
         self.assertEqual(self.client.get("/profile").status_code, 303)
+
+    def test_private_confirmation_window_matches_browser_and_server_expiry(self):
+        start = int(time.time())
+        clock = SimpleNamespace(time=lambda: start)
+        with patch("agent_test_site.time", clock), patch("test_site_state.time", clock):
+            options = self.client.post("/authentication/options", headers=self.headers)
+            self.assertEqual(options.json()["timeout"], 300000)
+            clock.time = lambda: start + 180
+            invalid = self.client.post(
+                "/authentication/verification", json={}, headers=self.headers
+            )
+            self.assertEqual(invalid.json(), {"verified": False})
+            self.client.post("/authentication/options", headers=self.headers)
+            clock.time = lambda: start + 480
+            expired = self.client.post(
+                "/authentication/verification", json={}, headers=self.headers
+            )
+            self.assertEqual(expired.json(), {"error": "challenge_unavailable"})
 
     def test_verifier_errors_do_not_echo_private_values(self):
         self.register()

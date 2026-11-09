@@ -35,7 +35,7 @@ _REASONS = {
 }
 _BROWSER_TIMEOUT_MS = 15_000
 _NATIVE_PROVIDER = "bitwarden-extension"
-_APPROVAL_SECONDS = 120
+_APPROVAL_SECONDS = 300
 
 
 def origin(url: str, *, local: bool = False) -> str:
