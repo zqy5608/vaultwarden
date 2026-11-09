@@ -41,6 +41,7 @@ private_values: list[str] = []
 network_statuses: list[dict] = []
 tls_error: dict = {}
 native_ui: dict = {}
+assertion_result: dict = {}
 
 
 def command(args: list[str]) -> bytes:
@@ -276,7 +277,16 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             async with rp.expect_response("**/authentication/verification") as verified:
                 await prompt.locator("[bit-dialog] button[type=submit]").click()
             progress("assertion_verification")
-            assert (await (await verified.value).json())["verified"] is True
+            response = await verified.value
+            result = await response.json()
+            assertion_result.update(
+                {
+                    "json_object": isinstance(result, dict),
+                    "verified": isinstance(result, dict)
+                    and result.get("verified") is True,
+                }
+            )
+            assert assertion_result["verified"]
             progress("assertion_verified")
             await rp.wait_for_url("https://webauthn.io/profile")
             progress("assertion_account")
@@ -455,8 +465,22 @@ def main() -> int:
         )
         result = asyncio.run(native_flow(runtime, extension, home))
         report = {"status": "passed", **result}
-    except Exception:
+    except Exception as error:
         report = {"status": "failed", "stage": stage, "api_statuses": network_statuses}
+        report["failure_type"] = (
+            type(error).__name__
+            if type(error).__name__
+            in {
+                "AssertionError",
+                "KeyError",
+                "TimeoutError",
+                "Error",
+                "JSONDecodeError",
+            }
+            else "other"
+        )
+        if assertion_result:
+            report["assertion_result"] = assertion_result
         if native_ui:
             report["synthetic_ui_controls"] = native_ui
         if stage == "disposable_vault_tls":
