@@ -10,6 +10,7 @@ import json
 import os
 import re
 import stat
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -32,6 +33,8 @@ _REASONS = {
     "authentication_unconfirmed",
 }
 _BROWSER_TIMEOUT_MS = 15_000
+_NATIVE_PROVIDER = "bitwarden-extension"
+_APPROVAL_SECONDS = 120
 
 
 def origin(url: str, *, local: bool = False) -> str:
@@ -81,6 +84,9 @@ def read_config(path: Path) -> dict | None:
 
 
 def validate_config(config: dict) -> None:
+    if isinstance(config, dict) and config.get("provider") == _NATIVE_PROVIDER:
+        _validate_native(config)
+        return
     allowed = {
         "server_url",
         "agent_token",
@@ -132,6 +138,51 @@ def validate_config(config: dict) -> None:
             raise BrokerError("invalid_site")
 
 
+def _validate_native(config: dict) -> None:
+    if set(config) != {
+        "provider",
+        "extension_path",
+        "profile_path",
+        "sites",
+    }:
+        raise BrokerError("invalid_config")
+    for key in ("extension_path", "profile_path"):
+        if not isinstance(config[key], str) or not Path(config[key]).is_absolute():
+            raise BrokerError("invalid_config")
+    # shortcut: one native site binds confirmation; use separate runtimes for more sites.
+    if not isinstance(config["sites"], dict) or len(config["sites"]) != 1:
+        raise BrokerError("invalid_config")
+    for name, site in config["sites"].items():
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", name) or set(site) != {
+            "login_url",
+            "passkey_selector",
+            "success_selector",
+            "success_path",
+            "account_selector",
+            "resource_origins",
+        }:
+            raise BrokerError("invalid_site")
+        if any(
+            not isinstance(v, str) or not v or len(v) > 2048
+            for k, v in site.items()
+            if k != "resource_origins"
+        ):
+            raise BrokerError("invalid_site")
+        login = urlsplit(site["login_url"])
+        origin(site["login_url"])
+        if (
+            login.query
+            or login.fragment
+            or not site["success_path"].startswith("/")
+            or any(c in site["success_path"] for c in "?#")
+        ):
+            raise BrokerError("invalid_site")
+        if not isinstance(site["resource_origins"], list) or any(
+            v != origin(v) for v in site["resource_origins"]
+        ):
+            raise BrokerError("invalid_site")
+
+
 # One browser operation checks the target again before exposing credentials to it.
 _FORM = """({site, expected, credentials}) => {
   const user = document.querySelector(site.username_selector);
@@ -174,6 +225,11 @@ class BrowserBroker:
         self.playwright = None
         self.browser = None
         self.sessions: dict[str, tuple] = {}
+        self.native = bool(config and config.get("provider") == _NATIVE_PROVIDER)
+        self.native_context = None
+        self.native_extension_origin = ""
+        self.pending: dict[str, float] = {}
+        self.native_verified: set[str] = set()
 
     def sites(self) -> dict:
         if self.config is None:
@@ -197,6 +253,8 @@ class BrowserBroker:
                 }
             session = self.sessions.get(name)
             try:
+                if self.native:
+                    return await self._native_status(name, site)
                 authenticated = bool(
                     session and await self._authenticated(session[1], site)
                 )
@@ -230,18 +288,189 @@ class BrowserBroker:
         from playwright.async_api import async_playwright
 
         self.playwright = await async_playwright().start()
+        if self.native:
+            await self._start_native()
+            return
         self.browser = await self.playwright.chromium.launch(
             headless=self.config.get("headless", False), chromium_sandbox=True
         )
 
     async def _authenticated(self, page, site: dict) -> bool:
-        return (
+        authenticated = (
             not page.is_closed()
             and origin(page.url) == origin(site["login_url"])
             and urlsplit(page.url).path == site["success_path"]
             and await page.locator(site["success_selector"]).count() == 1
             and await page.locator(site["success_selector"]).is_visible()
         )
+        if authenticated and self.native:
+            authenticated = await page.locator(site["account_selector"]).count() == 1
+        return authenticated
+
+    async def _start_native(self) -> None:
+        config = self.config
+        extension, profile = (
+            Path(config[k]) for k in ("extension_path", "profile_path")
+        )
+        if extension.resolve() != extension or any(
+            p.stat().st_uid != 0 or p.stat().st_mode & 0o022
+            for p in (extension, *extension.parents)
+        ):
+            raise BrokerError("trusted_native_files_required")
+        parent = profile.parent
+        if (
+            os.getuid() == 0
+            or parent.resolve() != parent
+            or parent.stat().st_uid != os.getuid()
+            or parent.stat().st_mode & 0o077
+        ):
+            raise BrokerError("private_native_runtime_required")
+        profile.mkdir(mode=0o700, exist_ok=True)
+        if (
+            profile.is_symlink()
+            or profile.stat().st_uid != os.getuid()
+            or profile.stat().st_mode & 0o077
+        ):
+            raise BrokerError("private_native_runtime_required")
+        self.native_context = await self.playwright.chromium.launch_persistent_context(
+            str(profile),
+            channel="chromium",
+            headless=False,
+            chromium_sandbox=True,
+            accept_downloads=False,
+            service_workers="block",
+            ignore_default_args=["--disable-extensions"],
+            args=[
+                f"--disable-extensions-except={extension}",
+                f"--load-extension={extension}",
+            ],
+        )
+        self.browser = self.native_context.browser
+        await self.native_context.clear_cookies()
+        worker = (
+            self.native_context.service_workers[0]
+            if self.native_context.service_workers
+            else await self.native_context.wait_for_event("serviceworker")
+        )
+        self.native_extension_origin = (
+            "chrome-extension://" + urlsplit(worker.url).netloc
+        )
+        await self.native_context.route("**/*", self._native_route)
+        await self.native_context.route_web_socket("**/*", lambda ws: ws.close())
+        self.native_context.on(
+            "page",
+            lambda page: asyncio.create_task(self._watch_native_verification(page)),
+        )
+        for page in self.native_context.pages:
+            await self._quiet_close(page)
+        operator = await self.native_context.new_page()
+        await operator.goto(self.native_extension_origin + "/popup/index.html#/login")
+
+    async def _watch_native_verification(self, page) -> None:
+        try:
+            await page.wait_for_url(
+                self.native_extension_origin + "/**", timeout=_BROWSER_TIMEOUT_MS
+            )
+            if not self.pending:
+                return
+            name = next(iter(self.pending))
+            # Observe presence only; the trusted provider handles and verifies the value.
+            await page.locator("input#masterPassword[type=password]").wait_for(
+                state="visible", timeout=_APPROVAL_SECONDS * 1000
+            )
+            if name in self.pending:
+                self.native_verified.add(name)
+        except Exception:
+            pass
+
+    async def _native_route(self, route) -> None:
+        request = route.request
+        allowed = request.url.startswith(self.native_extension_origin + "/")
+        if allowed:
+            await route.continue_()
+            return
+        try:
+            worker = request.service_worker
+            if worker is not None:
+                allowed = worker.url.startswith(self.native_extension_origin + "/")
+            else:
+                frame = request.frame
+                if frame.url.startswith(self.native_extension_origin + "/"):
+                    # The native provider owns vault authentication; MCP never handles it.
+                    allowed = True
+                else:
+                    for name, (_, page) in self.sessions.items():
+                        if frame.page is page:
+                            site = self.config["sites"][name]
+                            target = origin(request.url)
+                            allowed = target == origin(site["login_url"]) or (
+                                target in site["resource_origins"]
+                                and request.method == "GET"
+                                and request.resource_type
+                                in {"script", "stylesheet", "font", "image"}
+                            )
+                            break
+        except Exception:
+            allowed = False
+        await (route.continue_() if allowed else route.abort())
+
+    async def _native_status(self, name: str, site: dict) -> dict:
+        if name in self.pending and time.monotonic() >= self.pending[name]:
+            await self.close()
+            return {"status": "failed", "reason": "approval_expired", "site": name}
+        session = self.sessions.get(name)
+        if session and await self._authenticated(session[1], site):
+            if name not in self.native_verified:
+                await self.close()
+                return {
+                    "status": "failed",
+                    "reason": "provider_verification_unconfirmed",
+                    "site": name,
+                }
+            self.pending.pop(name, None)
+            return {"status": "authenticated", "site": name}
+        if name in self.pending:
+            return {"status": "needs_approval", "site": name}
+        return {"status": "not_authenticated", "site": name}
+
+    async def _native_login(self, name: str, site: dict) -> dict:
+        try:
+            if name in self.pending or (
+                name in self.sessions
+                and await self._authenticated(self.sessions[name][1], site)
+            ):
+                return await self._native_status(name, site)
+            await self._start()
+            previous = self.sessions.pop(name, None)
+            if previous:
+                await self._quiet_close(previous[1])
+            page = await self.native_context.new_page()
+            page.set_default_timeout(_BROWSER_TIMEOUT_MS)
+            self.sessions[name] = (self.native_context, page)
+            self.native_verified.discard(name)
+            page.on(
+                "popup", lambda popup: asyncio.create_task(self._quiet_close(popup))
+            )
+            await page.goto(site["login_url"], wait_until="domcontentloaded")
+            # The native provider waits for document focus before opening confirmation.
+            await page.bring_to_front()
+            button = page.locator(site["passkey_selector"])
+            if (
+                origin(page.url) != origin(site["login_url"])
+                or await button.count() != 1
+                or not await button.is_visible()
+            ):
+                raise BrokerError("unsafe_form")
+            self.pending[name] = time.monotonic() + _APPROVAL_SECONDS
+            await button.click()
+            return await self._native_status(name, site)
+        except Exception:
+            await self.close()
+            return {
+                "status": "failed",
+                "reason": "native_login_unconfirmed",
+                "site": name,
+            }
 
     def _credentials(self, site: dict) -> dict:
         config = self.config
@@ -322,6 +551,8 @@ class BrowserBroker:
                     if self.config is None
                     else "site_not_allowed"
                 }
+            if self.native:
+                return await self._native_login(name, site)
             context = None
             failure = "browser_unavailable"
             try:
@@ -400,7 +631,9 @@ class BrowserBroker:
                     await self._quiet_close(context)
 
     async def close(self) -> None:
-        if self.browser is not None:
+        if self.native_context is not None:
+            await self._quiet_close(self.native_context)
+        elif self.browser is not None:
             await self._quiet_close(self.browser)
         if self.playwright is not None:
             try:
@@ -410,3 +643,6 @@ class BrowserBroker:
         self.browser = None
         self.playwright = None
         self.sessions.clear()
+        self.native_context = None
+        self.pending.clear()
+        self.native_verified.clear()

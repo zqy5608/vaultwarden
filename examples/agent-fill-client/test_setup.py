@@ -190,6 +190,39 @@ class SetupTests(unittest.TestCase):
         self.assertIn("only supports MCP stdio", result.stderr)
         self.assertNotIn(sentinel, result.stderr)
 
+    def test_ssh_launcher_routes_native_clients_without_vault_config(self):
+        source = Path(__file__).resolve().parents[2] / "tools/agent-mcp-ssh.sh"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable, launcher, native = (
+                root / name for name in ("mcp", "launcher", "native.json")
+            )
+            executable.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+            executable.chmod(0o700)
+            launcher.write_text(
+                source.read_text()
+                .replace(
+                    "/opt/vaultwarden-agent/venv/bin/vaultwarden-agent-mcp",
+                    str(executable),
+                )
+                .replace("/var/lib/vaultwarden-agent/private/native.json", str(native))
+            )
+            for enabled in (False, True):
+                if enabled:
+                    native.write_text("{}")
+                result = subprocess.run(
+                    ["/bin/sh", str(launcher)],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                self.assertEqual(
+                    result.stdout.splitlines(),
+                    ["--broker-socket", "/run/vaultwarden-agent/broker.sock"]
+                    if enabled
+                    else ["--config", "/var/lib/vaultwarden-agent/private/config.json"],
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

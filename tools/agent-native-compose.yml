@@ -1,0 +1,14 @@
+name: vaultwarden-agent-native
+services:
+  vault-tls:
+    image: caddy@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - /etc/vaultwarden-agent/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/lib/vaultwarden-agent-tls:/data
+    tmpfs:
+      - /config:rw,nosuid,nodev

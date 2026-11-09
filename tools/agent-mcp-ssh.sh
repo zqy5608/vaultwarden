@@ -7,6 +7,12 @@ if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then
     exit 1
 fi
 
+if [ -f /var/lib/vaultwarden-agent/private/native.json ]; then
+    set -- --broker-socket /run/vaultwarden-agent/broker.sock
+else
+    set -- --config /var/lib/vaultwarden-agent/private/config.json
+fi
+
 exec /usr/bin/env -i \
     HOME=/var/lib/vaultwarden-agent \
     XDG_CACHE_HOME=/var/lib/vaultwarden-agent/private/cache \
@@ -14,4 +20,4 @@ exec /usr/bin/env -i \
     PATH=/usr/bin:/bin \
     LANG=C.UTF-8 \
     /opt/vaultwarden-agent/venv/bin/vaultwarden-agent-mcp \
-    --config /var/lib/vaultwarden-agent/private/config.json
+    "$@"

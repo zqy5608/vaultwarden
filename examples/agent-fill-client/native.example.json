@@ -1,0 +1,15 @@
+{
+  "provider": "bitwarden-extension",
+  "extension_path": "/opt/vaultwarden-agent/extensions/bitwarden-2026.10.0",
+  "profile_path": "/run/vaultwarden-agent/profile",
+  "sites": {
+    "github": {
+      "login_url": "https://github.com/login",
+      "passkey_selector": "button[data-action='click:webauthn-subtle#prompt']",
+      "success_path": "/",
+      "success_selector": "button[aria-label='Open user navigation menu']:visible",
+      "account_selector": "meta[name='user-login'][content='github-username']",
+      "resource_origins": ["https://github.githubassets.com"]
+    }
+  }
+}

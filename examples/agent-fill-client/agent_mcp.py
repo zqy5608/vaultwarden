@@ -20,26 +20,29 @@ from browser_broker import (
     read_config,
     validate_config,
 )
+from broker_rpc import call_broker
 
 DEFAULT_CONFIG = Path.home() / ".config/vaultwarden-agent/config.json"
 
 
-def create_server(config_path: Path):
+def create_server(config_path: Path, broker_socket: Path | None = None):
     from mcp.server import MCPServer
     from mcp.types import ToolAnnotations
 
-    try:
-        config = read_config(config_path)
-        broker = BrowserBroker(config)
-    except Exception:
-        broker = BrowserBroker(None)
+    broker = None
+    if broker_socket is None:
+        try:
+            broker = BrowserBroker(read_config(config_path))
+        except Exception:
+            broker = BrowserBroker(None)
 
     @asynccontextmanager
     async def lifespan(server):
         try:
             yield
         finally:
-            await broker.close()
+            if broker is not None:
+                await broker.close()
 
     server = MCPServer(
         "Vaultwarden trusted login", lifespan=lifespan, log_level="WARNING"
@@ -48,6 +51,8 @@ def create_server(config_path: Path):
     @server.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False))
     async def vault_sites() -> dict:
         """List operator-approved login sites and origins. Returns no vault credentials."""
+        if broker_socket is not None:
+            return await call_broker(broker_socket, "sites")
         return broker.sites()
 
     @server.tool(
@@ -64,11 +69,15 @@ def create_server(config_path: Path):
         The operator must configure the site first. This tool never returns passwords,
         page contents, cookies or screenshots. It cannot access arbitrary URLs.
         """
+        if broker_socket is not None:
+            return await call_broker(broker_socket, "login", site)
         return await broker.login(site)
 
     @server.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False))
     async def vault_status(site: str) -> dict:
         """Check the approved post-login path and element without returning browser data."""
+        if broker_socket is not None:
+            return await call_broker(broker_socket, "status", site)
         return await broker.status(site)
 
     return server
@@ -79,8 +88,9 @@ def main() -> None:
         description="Run the trusted Vaultwarden MCP server over stdio."
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--broker-socket", type=Path)
     args = parser.parse_args()
-    create_server(args.config).run(transport="stdio")
+    create_server(args.config, args.broker_socket).run(transport="stdio")
 
 
 def unlock_user_key(server: str, email: str, password: str) -> str:
