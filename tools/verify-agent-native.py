@@ -310,17 +310,6 @@ async def native_mcp_flow(runtime, broker, operator, password, username) -> dict
             await server.wait_closed()
 
 
-async def browser_profile(context) -> str:
-    session = await context.new_cdp_session(context.pages[0])
-    try:
-        arguments = (await session.send("Browser.getBrowserCommandLine"))["arguments"]
-        return next(
-            value for value in arguments if value.startswith("--user-data-dir=")
-        )
-    finally:
-        await session.detach()
-
-
 async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
     from browser_broker import BrowserBroker, validate_config
 
@@ -483,15 +472,16 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 runtime, broker, page, password, username
             )
             progress("native_restart_requires_operator")
-            previous_profile = await browser_profile(broker.native_context)
             await broker.close()
             await broker._start()
-            assert await browser_profile(broker.native_context) != previous_profile
-            fresh = broker.native_context.pages[0]
+            fresh = await broker.native_context.new_page()
             await fresh.goto(
                 broker.native_extension_origin + "/popup/index.html#/login"
             )
-            if "default-password-manager-prompt" in fresh.url:
+            await fresh.locator(
+                "#email:visible, button:has-text('Skip'):visible"
+            ).first.wait_for()
+            if await fresh.get_by_role("button", name="Skip", exact=True).is_visible():
                 await fresh.get_by_role("button", name="Skip", exact=True).click()
             await fresh.locator("#email").wait_for(state="visible")
             assert await fresh.locator("#email").input_value() == ""

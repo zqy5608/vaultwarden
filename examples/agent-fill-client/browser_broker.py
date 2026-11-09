@@ -334,6 +334,7 @@ class BrowserBroker:
         ):
             raise BrokerError("private_native_runtime_required")
         # Reopening an extension cache can retain account state after failed approval.
+        # shortcut: closed profiles remain volatile; restart the service to reclaim space.
         profile = Path(tempfile.mkdtemp(prefix="browser-", dir=profile))
         self.native_context = await self.playwright.chromium.launch_persistent_context(
             str(profile),
