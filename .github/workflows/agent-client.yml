@@ -6,11 +6,13 @@ on:
     paths:
       - "examples/agent-fill-client/**"
       - "tools/verify-agent-mcp.py"
+      - "tools/verify-agent-native.py"
       - ".github/workflows/agent-client.yml"
   pull_request:
     paths:
       - "examples/agent-fill-client/**"
       - "tools/verify-agent-mcp.py"
+      - "tools/verify-agent-native.py"
       - ".github/workflows/agent-client.yml"
 
 concurrency:
@@ -49,3 +51,34 @@ jobs:
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_mcp.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_setup.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_broker_rpc.py
+
+  native-provider:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install native browser calibration dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/agent-native"
+          "$RUNNER_TEMP/agent-native/bin/pip" install './examples/agent-fill-client[mcp]'
+          "$RUNNER_TEMP/agent-native/bin/python" -m playwright install --with-deps chromium
+          sudo apt-get install -y libnss3-tools
+      - name: Allow the full Chromium sandbox
+        run: |
+          if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" = 1 ]; then
+            cat <<EOF | sudo tee /etc/apparmor.d/vaultwarden-agent-native-ci >/dev/null
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile vaultwarden-agent-native-ci $HOME/.cache/ms-playwright/**/chrome flags=(unconfined) {
+            userns,
+          }
+          EOF
+            sudo apparmor_parser -r /etc/apparmor.d/vaultwarden-agent-native-ci
+          fi
+      - name: Verify native passkeys with disposable credentials
+        run: |
+          xvfb-run -a -s "-screen 0 1440x1000x24 -nolisten tcp" \
+            "$RUNNER_TEMP/agent-native/bin/python" tools/verify-agent-native.py \
+            --report "$RUNNER_TEMP/native-passkey-report.json"
