@@ -218,7 +218,11 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
                 assert len((await client.list_tools()).tools) == 3
                 assert (await call(client, "vault_sites"))["status"] == "ready"
                 progress("native_mcp_login")
-                async with context.expect_page() as opened:
+                async with context.expect_page(
+                    predicate=lambda page: page.url.startswith(
+                        broker.native_extension_origin + "/"
+                    )
+                ) as opened:
                     assert (await call(client, "vault_login", "webauthn"))[
                         "status"
                     ] == "needs_approval"
