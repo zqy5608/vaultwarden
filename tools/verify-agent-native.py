@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -469,12 +470,15 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("native_restart_requires_operator")
             await broker.close()
             await broker._start()
+            progress("native_restart_browser_ready")
             fresh = broker.native_context.pages[0]
             await fresh.goto(
                 broker.native_extension_origin + "/popup/index.html#/intro-carousel"
             )
+            progress("native_restart_onboarding")
             await fresh.get_by_role("button", name="Log in", exact=True).click()
             await fresh.get_by_role("button", name="Skip", exact=True).click()
+            progress("native_restart_login")
             await fresh.locator("#email").wait_for(state="visible")
             assert await fresh.locator("#email").input_value() == ""
             assert not await broker.native_context.cookies("https://webauthn.io")
@@ -673,6 +677,13 @@ def main() -> int:
         for item in errors:
             if isinstance(item, BaseExceptionGroup):
                 errors.extend(item.exceptions)
+        report["failure_locations"] = [
+            {"source": Path(frame.filename).name, "line": frame.lineno}
+            for item in errors
+            for frame in traceback.extract_tb(item.__traceback__)
+            if Path(frame.filename).name
+            in {"verify-agent-native.py", "browser_broker.py"}
+        ]
         report["leaf_failure_types"] = sorted(
             {
                 type(item).__name__
