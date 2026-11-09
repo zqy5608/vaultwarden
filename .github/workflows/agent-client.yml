@@ -97,11 +97,37 @@ jobs:
           gh release download browser-v2026.10.0 --repo bitwarden/clients \
             --pattern dist-chrome-2026.10.0.zip --skip-existing \
             --dir "$RUNNER_TEMP/native-extension"
-      - name: Build the isolated test service with locked dependencies
+      - name: Verify the isolated test service container
+        env:
+          AGENT_TEST_IMAGE: vaultwarden-agent-test:ci
+          AGENT_TEST_TUNNEL_ID: 00000000-0000-4000-8000-000000000000
         run: |
           docker build --quiet -t vaultwarden-agent-test:ci ./examples/agent-test-site
-          AGENT_TEST_IMAGE=vaultwarden-agent-test:ci AGENT_TEST_TUNNEL_ID=00000000-0000-4000-8000-000000000000 \
-            docker compose -f examples/agent-test-site/compose.yml config --quiet
+          docker compose -f examples/agent-test-site/compose.yml config --quiet
+          test ! -e /var/lib/vaultwarden-agent-test
+          sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/vaultwarden-agent-test
+          trap 'docker compose -f examples/agent-test-site/compose.yml stop --timeout 10 test-site >/dev/null' EXIT
+          docker compose -f examples/agent-test-site/compose.yml up -d --wait --wait-timeout 60 test-site
+          python3 - <<'PY'
+          import json, subprocess
+          container = subprocess.check_output([
+              'docker', 'compose', '-f', 'examples/agent-test-site/compose.yml',
+              'ps', '-q', 'test-site'
+          ], text=True).strip()
+          state = json.loads(subprocess.check_output(['docker', 'inspect', container]))[0]
+          assert state['State']['Health']['Status'] == 'healthy'
+          assert state['Config']['User'] == '10001:10001'
+          assert state['HostConfig']['ReadonlyRootfs']
+          assert not state['HostConfig']['PortBindings']
+          assert state['HostConfig']['CapDrop'] == ['ALL']
+          assert 'no-new-privileges:true' in state['HostConfig']['SecurityOpt']
+          assert set(state['NetworkSettings']['Networks']) == {'vaultwarden-agent-test-ingress'}
+          network = json.loads(subprocess.check_output([
+              'docker', 'network', 'inspect', 'vaultwarden-agent-test-ingress'
+          ]))[0]
+          assert network['Internal']
+          print(json.dumps({'container_health': 'passed', 'runtime_isolation': 'passed'}))
+          PY
       - name: Verify native passkeys with disposable credentials
         run: |
           xvfb-run -a -s "-screen 0 1440x1000x24 -nolisten tcp" \
