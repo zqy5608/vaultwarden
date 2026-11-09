@@ -8,11 +8,18 @@ Chromium browser. The model chooses an operator-approved site, and receives only
 site identifiers, origins and fixed execution states. No server API, database
 schema, official-client behavior or existing CLI output contract changes.
 
-The first acceptance target is the public The Internet login demonstration. The
-user has deferred selecting a personal website/account. A disposable local
+The initial acceptance target was the public The Internet login demonstration. A disposable local
 Vaultwarden instance supplies real encrypted vault items and scoped credentials;
 the login itself must reach the external HTTPS website and verify its logged-in
 state. A mocked HTTP response is not sufficient for this acceptance check.
+
+The user has now selected the personal production target: GitHub account
+`zqy5608`, entry `Github`, using a passkey stored in **1Password**. Do not assume
+this credential already exists in Vaultwarden. Version 0.1.2's username/password
+integration does not satisfy this acceptance. 1Password's official Agents
+integration currently excludes passkeys. The user approved a native encrypted
+copy of only this item into Vaultwarden, retaining the 1Password original.
+The copy has not been performed; native-provider calibration comes first.
 
 ## Trust boundary
 
@@ -109,9 +116,48 @@ The first release still supports username/password forms only. A production
 target requiring MFA, passkeys or cross-origin SSO needs a separate explicit
 design; do not silently disable that site's account protections.
 
+## GitHub passkey acceptance
+
+- Preserve the selected passkey authentication method. Use the existing native
+  provider, retaining its user-presence/verification ceremony. Do not export the
+  production private key or import it into a testing virtual authenticator.
+- Keep authentication material, verification codes, page contents and cookies
+  outside the model context. MCP receives only approved site metadata and fixed
+  action states. Operator authentication happens through a private human channel.
+- The existing Agent API deliberately excludes FIDO2 credentials. Do not expose
+  them through AI metadata tools or silently broaden the fill API. If a native
+  browser extension is used, document its vault permissions, profile lifetime and
+  operator verification path before configuring real credentials.
+- Keep the trusted runtime isolated from the AI host. A logged-in local browser
+  or existing GitHub CLI token is not evidence of a new isolated MCP login.
+- Verify a real assertion for `github.com`, the authenticated `zqy5608` identity,
+  retained session state, rejection of an unapproved site, and a bounded failure
+  when the native provider is locked or the user cancels verification.
+- Only declare formal activation after those live checks pass. The earlier
+  public-demo test and remote MCP connectivity checks remain separate evidence.
+
+After restarting Codex, all three tools were called directly over restricted
+Oracle SSH and returned `not_configured`. A later native-calibration SSH
+interruption closed the original current-chat transport. A fresh independent
+restricted MCP session still initializes and returns `not_configured`; this does
+not re-establish the original chat connection or prove a personal login.
+
+Draft PR #12 adds shared broker state and a native provider control plane; all 61
+local checks pass. It remains unmerged and undeployed. The source provider is
+1Password; the one-item native copy is approved but not performed. The user also
+approved a dedicated Vaultwarden account containing only that item. Native UI
+launch passed on Oracle/Xvfb. CI passes loopback TLS, vault login, native passkey
+registration and prompt cancellation; assertion verification is still blocked.
+Renewed operator access confirmed production healthy, both loopback health
+endpoints HTTP 200 and the old disposable container no longer running. Private
+operator enrollment and real GitHub login remain unfinished.
+
 ## Sources
 
 - [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
 - [Official MCP Python SDK](https://py.sdk.modelcontextprotocol.io/)
 - [Playwright browser isolation and request interception](https://playwright.dev/python/docs/api/class-browsercontext)
 - [Public acceptance application](https://github.com/saucelabs/the-internet)
+- [GitHub passkey and second-factor authentication](https://docs.github.com/en/authentication/securing-your-account-with-two-factor-authentication-2fa/accessing-github-using-two-factor-authentication)
+- [Bitwarden native passkey provider](https://contributing.bitwarden.com/architecture/deep-dives/passkeys/implementations/provider/browser-extension/)
+- [Chromium extension support](https://playwright.dev/python/docs/chrome-extensions)

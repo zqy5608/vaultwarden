@@ -245,8 +245,9 @@ password or script. The server returns fixed states, not the redeem body, DOM,
 screenshots, cookies, browser errors or page text. The original reference CLIs
 above retain their existing output contracts and are not used as MCP tools.
 
-This is a username/password login integration. It does not automate MFA,
-passkeys, cross-origin SSO, or arbitrary actions after login. The approved
+The default provider handles username/password forms. The optional native
+provider below supports passkeys with private operator confirmation. Neither
+provider automates cross-origin SSO or arbitrary actions after login. The approved
 website necessarily receives its own password. An unrestricted agent with
 access to the trusted process's files or memory can bypass this boundary;
 deploy the trusted server on a separate OS account/host when that isolation is
@@ -309,7 +310,7 @@ or invalid private configuration exposes the tool catalog but returns
 | Tool | Input | Output |
 | --- | --- | --- |
 | `vault_sites` | none | Approved site identifiers and origins |
-| `vault_login` | `site` | Fixed authenticated/failed state and a bounded reason code |
+| `vault_login` | `site` | Fixed authenticated/needs-approval/failed state and a bounded reason code |
 | `vault_status` | `site` | Verified authentication state without page contents |
 
 For multiple stdio/SSH clients, run one broker under the trusted account and
@@ -330,6 +331,33 @@ Without a shared broker, sessions stay in memory for the MCP process lifetime;
 they are not exported or saved to disk. Failed submissions are not retried automatically.
 Debug logging is rejected before browser startup. Authentication is reported
 only when both the configured origin/path and post-login selector match.
+
+### Native passkey provider
+
+Use `native.example.json` for a single approved passkey site. Replace its expected
+account selector and verify the site selectors before activation. The configuration
+contains only provider paths and site metadata; the native extension owns vault
+authentication, decryption and signing. Enable master-password re-prompt on the
+selected login item. This mode uses normal vault-account permissions, not Agent
+folder tokens; review the account's accessible vault contents before enrollment.
+
+Run the shared broker under a separate unprivileged account, with a root-owned
+pinned Bitwarden extension, full sandboxed Chromium, a private display and an
+operator-only confirmation channel. The profile parent must be account-owned
+0700. Use a volatile runtime directory for the profile, browser home, cache and
+configuration. Prepare any local TLS trust only in that browser user's NSS
+database; never disable certificate verification or change the system trust store.
+
+The operator privately enrolls the correct self-hosted account in the native UI.
+`vault_login` then returns `needs_approval` while the operator selects the passkey
+and completes native confirmation. `vault_status` checks the post-login path,
+visible success element and expected account selector. It also requires the
+provider's password-confirmation field to have appeared for this pending request;
+it never reads its value. Approval expires after two minutes and closes the
+private browser. Do not automate confirmation for a personal credential.
+
+One native site per runtime keeps confirmation bound to the requested site.
+There is no arbitrary URL, page, cookie, screenshot or credential-export tool.
 
 ### Verify the complete flow
 
