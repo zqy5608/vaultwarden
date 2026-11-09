@@ -43,6 +43,7 @@ network_statuses: list[dict] = []
 tls_error: dict = {}
 native_ui: dict = {}
 assertion_result: dict = {}
+mcp_states: list[dict] = []
 
 
 def command(args: list[str]) -> bytes:
@@ -170,9 +171,17 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
         response = await client.call_tool(tool, {} if site is None else {"site": site})
         records.append(response.model_dump_json())
         result = response.structured_content
-        return (
+        result = (
             result if isinstance(result, dict) else json.loads(response.content[0].text)
         )
+        assert not any(value in records[-1] for value in private_values)
+        mcp_states.append(
+            {
+                "tool": tool,
+                **{key: result[key] for key in ("status", "reason") if key in result},
+            }
+        )
+        return result
 
     try:
         progress("native_mcp_start")
@@ -268,13 +277,27 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
         }
     except Exception:
         if operator is not None:
+            pages = broker.native_context.pages
+            active = next(
+                (
+                    page
+                    for page in reversed(pages)
+                    if page is not operator
+                    and page.url.startswith(broker.native_extension_origin + "/")
+                ),
+                operator,
+            )
             native_ui.update(
                 {
-                    "route": urlsplit(operator.url).fragment.split("?")[0],
-                    "inputs": await operator.locator("input").evaluate_all(
+                    "route": urlsplit(active.url).fragment.split("?")[0],
+                    "native_windows": sum(
+                        page.url.startswith(broker.native_extension_origin + "/")
+                        for page in pages
+                    ),
+                    "inputs": await active.locator("input").evaluate_all(
                         "xs => xs.map(x => ({id: x.id, type: x.type}))"
                     ),
-                    "buttons": await operator.get_by_role("button").all_text_contents(),
+                    "buttons": await active.get_by_role("button").all_text_contents(),
                 }
             )
             assert not any(value in json.dumps(native_ui) for value in private_values)
@@ -643,6 +666,20 @@ def main() -> int:
         report = {"status": "passed", **result}
     except Exception as error:
         report = {"status": "failed", "stage": stage, "api_statuses": network_statuses}
+        errors = [error]
+        for item in errors:
+            if isinstance(item, BaseExceptionGroup):
+                errors.extend(item.exceptions)
+        report["leaf_failure_types"] = sorted(
+            {
+                type(item).__name__
+                for item in errors
+                if type(item).__name__
+                in {"AssertionError", "TimeoutError", "KeyError", "Error"}
+            }
+        )
+        if mcp_states:
+            report["mcp_states"] = mcp_states
         report["failure_type"] = (
             type(error).__name__
             if type(error).__name__
