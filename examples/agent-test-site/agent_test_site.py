@@ -312,7 +312,8 @@ def create_app(origin: str, path: Path) -> Starlette:
         response.headers.update(
             {
                 "Cache-Control": "no-store",
-                "Referrer-Policy": "no-referrer",
+                # Preserve the Origin of native same-origin form POSTs; never refer externally.
+                "Referrer-Policy": "same-origin",
                 "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'; form-action 'self'",
             }
         )
