@@ -1,5 +1,8 @@
 """Share one trusted browser across restricted stdio MCP connections."""
 
+# Backend exceptions may contain private browser details; return only fixed states.
+# ruff: noqa: BLE001
+
 from __future__ import annotations
 
 import argparse
@@ -81,8 +84,10 @@ async def serve(config_path: Path, socket_path: Path) -> None:
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stopped.set)
-    server = await start_broker(socket_path, broker)
     try:
+        if broker.native:
+            await broker._start()
+        server = await start_broker(socket_path, broker)
         async with server:
             await stopped.wait()
     finally:
