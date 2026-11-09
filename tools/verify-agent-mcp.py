@@ -147,6 +147,11 @@ async def call_mcp(config_path, diagnostics, secret_values):
             "PATH": os.environ.get("PATH", ""),
             "HOME": str(Path.home()),
             "PYTHONDONTWRITEBYTECODE": "1",
+            **{
+                name: os.environ[name]
+                for name in ("DISPLAY", "PLAYWRIGHT_BROWSERS_PATH", "XDG_CONFIG_HOME")
+                if name in os.environ
+            },
         },
     )
     transcripts = []
