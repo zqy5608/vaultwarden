@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Calibrate the official passkey provider with disposable credentials only."""
 
+# Fixture failures may contain credentials; only fixed stages cross the output boundary.
+# ruff: noqa: BLE001
+
 from __future__ import annotations
 
 import argparse
@@ -36,6 +39,7 @@ HTTPS = "https://localhost:18443"
 stage = "start"
 private_values: list[str] = []
 network_statuses: list[dict] = []
+tls_error: dict = {}
 
 
 def command(args: list[str]) -> bytes:
@@ -358,7 +362,14 @@ def main() -> int:
                 ) as response:
                     assert response.status == 200
                 break
-            except Exception:
+            except (OSError, subprocess.CalledProcessError) as error:
+                tls_error.update(
+                    {
+                        "type": type(error).__name__,
+                        "reason_type": type(getattr(error, "reason", None)).__name__,
+                        "http_status": getattr(error, "code", None),
+                    }
+                )
                 assert time.monotonic() < deadline
                 time.sleep(0.2)
         home = runtime / "home"
@@ -384,17 +395,41 @@ def main() -> int:
         report = {"status": "passed", **result}
     except Exception:
         report = {"status": "failed", "stage": stage, "api_statuses": network_statuses}
+        if stage == "disposable_vault_tls":
+            report["tls_error"] = tls_error
     finally:
         captured = [
-            subprocess.run(["docker", "logs", name], capture_output=True)
+            subprocess.run(["docker", "logs", name], check=False, capture_output=True)
             for name in containers
         ]
         diagnostics = b"".join(result.stdout + result.stderr for result in captured)
+        if stage == "disposable_vault_tls" and not private_values:
+            inspected = [
+                subprocess.run(
+                    [
+                        "docker",
+                        "inspect",
+                        "--format",
+                        "{{.State.Status}}:{{.State.ExitCode}}:{{.State.OOMKilled}}",
+                        name,
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                for name in containers
+            ]
+            report["fixture_container_states"] = [
+                result.stdout.strip() if result.returncode == 0 else "unavailable"
+                for result in inspected
+            ]
         if any(value.encode() in diagnostics for value in private_values):
             report = {"status": "failed", "stage": "diagnostic_secret_scan"}
         stopped = [
             subprocess.run(
-                ["docker", "stop", "--time", "10", name], capture_output=True
+                ["docker", "stop", "--time", "10", name],
+                check=False,
+                capture_output=True,
             ).returncode
             == 0
             for name in containers
