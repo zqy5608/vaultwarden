@@ -51,3 +51,13 @@ backup. Do not run destructive volume cleanup or recreate the production vault.
 The CI verifier accepts `--site-origin https://agent-test.bo0lean.com` for a
 public-origin run while retaining a disposable vault. Its private fixture logs
 and profile must not be attached to model-visible diagnostics.
+
+## Private operator enrollment
+
+After public HTTPS is verified, create a test account privately in the operator
+browser and save only its test credential in the dedicated Vaultwarden account.
+Register a new passkey for this RP and enable the item's master-password
+re-prompt. Sign out before MCP acceptance. Keep the existing GitHub item intact.
+Set the broker's approved origin, selectors and expected test username using
+private operator metadata; do not send the password, passkey or session to Codex.
+Retire temporary administrator SSH signing access before private credential entry.

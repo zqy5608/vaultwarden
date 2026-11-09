@@ -75,6 +75,31 @@ def observe(response) -> None:
         )
 
 
+async def open_provider_login(page) -> None:
+    """Follow the fresh profile's actual guards instead of racing hash navigation."""
+    panels = page.locator(
+        "environment-selector, app-intro-carousel, autofill-default-password-manager-prompt"
+    )
+    for _ in range(3):
+        await panels.first.wait_for(state="visible")
+        if await page.locator("environment-selector").is_visible():
+            return
+        intro = page.locator("app-intro-carousel")
+        panel = (
+            intro
+            if await intro.is_visible()
+            else page.locator("autofill-default-password-manager-prompt")
+        )
+        button = (
+            panel.get_by_role("button", name="Log in", exact=True)
+            if await intro.is_visible()
+            else panel.locator("#default-password-manager-prompt_button_skip-for-now")
+        )
+        await button.click()
+        await panel.wait_for(state="detached")
+    raise AssertionError("provider_onboarding_not_completed")
+
+
 def seed_vault(runtime: Path) -> tuple[str, str, str, str]:
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
@@ -402,11 +427,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             page = context.pages[0]
             page.set_default_timeout(20000)
             progress("native_environment")
-            await page.goto(
-                f"chrome-extension://{extension_id}/popup/index.html#/intro-carousel"
-            )
-            await page.get_by_role("button", name="Log in", exact=True).click()
-            await page.get_by_role("button", name="Skip", exact=True).click()
+            await open_provider_login(page)
             await page.locator("environment-selector").get_by_role("button").click()
             await page.get_by_role("menuitem", name="self-hosted").click()
             await page.locator("#self_hosted_env_settings_form_input_base_url").fill(
@@ -552,12 +573,8 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             await broker._start()
             progress("native_restart_browser_ready")
             fresh = broker.native_context.pages[0]
-            await fresh.goto(
-                broker.native_extension_origin + "/popup/index.html#/intro-carousel"
-            )
             progress("native_restart_onboarding")
-            await fresh.get_by_role("button", name="Log in", exact=True).click()
-            await fresh.get_by_role("button", name="Skip", exact=True).click()
+            await open_provider_login(fresh)
             progress("native_restart_login")
             await fresh.locator("#email").wait_for(state="visible")
             assert await fresh.locator("#email").input_value() == ""
