@@ -16,7 +16,9 @@ must not hold up unattended acceptance.
 Keep that machine identity in a separate Vaultwarden bound only to loopback,
 with public registration disabled and folder ACLs required. Reuse the verified
 production image by digest, without mounting production data or changing its
-configuration. Its admin token and broker config are encrypted using
+configuration. Only the TLS proxy joins the additional bridge needed to publish
+its port on host loopback; the credential vault stays on the internal network.
+Its admin token and broker config are encrypted using
 `systemd-creds --with-key=host`; plaintext exists only in trusted process memory
 or private runtime credentials under `/run`. This protects the AI boundary,
 not against the host administrator. It does not automate personal-site MFA.

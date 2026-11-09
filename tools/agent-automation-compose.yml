@@ -35,9 +35,11 @@ services:
       - /etc/vaultwarden-agent/automation-Caddyfile:/etc/caddy/Caddyfile:ro
       - /var/lib/vaultwarden-agent-automation-tls:/data
     tmpfs: ["/config:rw,nosuid,nodev"]
-    networks: [private]
+    networks: [private, loopback]
     logging: {driver: none}
 networks:
   private:
     name: vaultwarden-agent-automation
     internal: true
+  loopback:
+    name: vaultwarden-agent-automation-loopback
