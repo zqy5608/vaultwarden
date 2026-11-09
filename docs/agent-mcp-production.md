@@ -35,8 +35,11 @@ root-owned 0700, and create `/var/lib/vaultwarden-agent-automation` and
 | `tools/vaultwarden-agent-password.service` | `/etc/systemd/system/vaultwarden-agent-broker.service` |
 | `tools/agent-mcp-ssh.sh` | `/opt/vaultwarden-agent/bin/mcp-ssh` (0755) |
 
-The encrypted config is delivered by `LoadCredentialEncrypted` directly to the
-unprivileged broker. The vault unit copies its runtime admin credential to a
+The encrypted config is delivered by `LoadCredentialEncrypted` and copied by
+the unprivileged service into its private `/run` directory as mode 0600. This
+retains the broker's strict owner/permission checks: systemd credentials may be
+root-owned and group-readable even when the service can read them. The vault
+unit copies its runtime admin credential to a
 root-only `/run/vaultwarden-agent-automation` directory so Docker can bind-mount
 it across the service's private credential namespace. Compose stops before that
 directory is removed. No credential belongs in arguments, environment variables,
