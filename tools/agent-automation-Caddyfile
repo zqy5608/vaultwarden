@@ -1,0 +1,11 @@
+{
+    admin off
+    skip_install_trust
+    auto_https disable_redirects
+}
+
+https://localhost:18444 {
+    bind 0.0.0.0
+    tls internal
+    reverse_proxy vault:80
+}
