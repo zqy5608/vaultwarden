@@ -202,7 +202,9 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             await page.locator("#masterPassword").fill(password)
             await page.get_by_role("button", name="Log in", exact=True).click()
             progress("native_sync")
-            await page.wait_for_url("**/#/tabs/vault")
+            await page.wait_for_url(
+                f"chrome-extension://{extension_id}/popup/index.html#/tabs/vault"
+            )
             progress("native_registration")
             rp = await context.new_page()
             rp.set_default_timeout(20000)
