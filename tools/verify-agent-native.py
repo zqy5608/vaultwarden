@@ -19,6 +19,7 @@ import secrets
 import signal
 import ssl
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
@@ -133,11 +134,141 @@ def seed_vault() -> tuple[str, str, str]:
     return email, password, username
 
 
+async def native_mcp_flow(runtime, extension, home, email, password, username) -> dict:
+    from broker_rpc import start_broker
+    from browser_broker import BrowserBroker, validate_config
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+
+    config = {
+        "provider": "bitwarden-extension",
+        "extension_path": str(extension),
+        "profile_path": str(runtime / "profile"),
+        "sites": {
+            "webauthn": {
+                "login_url": "https://webauthn.io/",
+                "passkey_selector": "#login-button",
+                "success_path": "/profile",
+                "success_selector": 'h3:has-text("You\'re logged in!")',
+                "account_selector": f"h3 strong:has-text('{username}')",
+                "resource_origins": [],
+            }
+        },
+    }
+    validate_config(config)
+    broker = BrowserBroker(config)
+    socket = runtime / "broker.sock"
+    server = None
+    records = []
+    parameters = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "agent_mcp", "--broker-socket", str(socket)],
+    )
+
+    async def call(client, tool, site=None):
+        response = await client.call_tool(tool, {} if site is None else {"site": site})
+        records.append(response.model_dump_json())
+        result = response.structured_content
+        return (
+            result if isinstance(result, dict) else json.loads(response.content[0].text)
+        )
+
+    try:
+        progress("native_mcp_start")
+        previous = {name: os.environ.get(name) for name in ("HOME", "XDG_CONFIG_HOME")}
+        try:
+            os.environ.update(HOME=str(home), XDG_CONFIG_HOME=str(home / "config"))
+            await broker._start()
+        finally:
+            for name, value in previous.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+        context = broker.native_context
+        operator = context.pages[0]
+        await operator.wait_for_url(re.compile(r"#/(login|lock|tabs/vault)$"))
+        if not operator.url.endswith("#/tabs/vault"):
+            progress("native_mcp_private_unlock")
+            if await operator.locator("#email").is_visible():
+                await operator.locator("#email").fill(email)
+                await operator.get_by_role(
+                    "button", name="Continue", exact=True
+                ).click()
+            await operator.locator("#masterPassword").fill(password)
+            await operator.get_by_role(
+                "button", name=re.compile(r"^(Unlock|Log in)$")
+            ).click()
+            await operator.wait_for_url(
+                broker.native_extension_origin + "/popup/index.html#/tabs/vault"
+            )
+        server = await start_broker(socket, broker)
+        with (runtime / "mcp.log").open("w+") as diagnostics:
+            async with (
+                stdio_client(parameters, errlog=diagnostics) as (read, write),
+                ClientSession(read, write) as client,
+            ):
+                await client.initialize()
+                assert len((await client.list_tools()).tools) == 3
+                assert (await call(client, "vault_sites"))["status"] == "ready"
+                progress("native_mcp_login")
+                async with context.expect_page() as opened:
+                    assert (await call(client, "vault_login", "webauthn"))[
+                        "status"
+                    ] == "needs_approval"
+                prompt = await opened.value
+                await prompt.wait_for_url(broker.native_extension_origin + "/**")
+                await (
+                    prompt.locator("app-fido2-cipher-row")
+                    .filter(has_text="Native passkey calibration")
+                    .get_by_role("button")
+                    .click()
+                )
+                await prompt.locator("#masterPassword").fill(password)
+                progress("native_mcp_confirmation")
+                await prompt.locator("[bit-dialog] button[type=submit]").click()
+                rp = broker.sessions["webauthn"][1]
+                await rp.wait_for_url("https://webauthn.io/profile")
+                assert (await call(client, "vault_status", "webauthn"))[
+                    "status"
+                ] == "authenticated"
+            async with (
+                stdio_client(parameters, errlog=diagnostics) as (read, write),
+                ClientSession(read, write) as client,
+            ):
+                await client.initialize()
+                progress("native_mcp_retained_session")
+                assert (await call(client, "vault_status", "webauthn"))[
+                    "status"
+                ] == "authenticated"
+                assert (await call(client, "vault_login", "webauthn"))[
+                    "status"
+                ] == "authenticated"
+                assert (await call(client, "vault_login", "unapproved"))[
+                    "status"
+                ] == "site_not_allowed"
+            diagnostics.flush()
+            diagnostics.seek(0)
+            output = "".join(records) + diagnostics.read()
+            assert not any(value in output for value in private_values)
+        return {
+            "native_mcp_login": "passed",
+            "independent_mcp_session": "passed",
+            "mcp_secret_scan": "passed",
+        }
+    finally:
+        if server is not None:
+            server.close()
+            await server.wait_closed()
+        await broker.close()
+
+
 async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
     from playwright.async_api import async_playwright
 
     email, password, username = seed_vault()
     progress("native_browser_launch")
+    (runtime / "profile").mkdir(mode=0o700)
     async with async_playwright() as engine:
         context = await engine.chromium.launch_persistent_context(
             str(runtime / "profile"),
@@ -275,10 +406,15 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("assertion_confirmation")
             await prompt.locator("#masterPassword").fill(password)
             async with rp.expect_response("**/authentication/verification") as verified:
-                await prompt.locator("[bit-dialog] button[type=submit]").click()
+                confirmation = asyncio.create_task(
+                    prompt.locator("[bit-dialog] button[type=submit]").click()
+                )
             progress("assertion_verification")
-            response = await verified.value
-            result = await response.json()
+            try:
+                response = await verified.value
+                result = await response.json()
+            finally:
+                await confirmation
             assertion_result.update(
                 {
                     "json_object": isinstance(result, dict),
@@ -294,7 +430,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("assertion_retained_session")
             await rp.reload(wait_until="domcontentloaded")
             assert urlsplit(rp.url).path == "/profile"
-            return {
+            result = {
                 "native_registration": "passed",
                 "native_assertion": "passed",
                 "master_reprompt_cancel": "passed",
@@ -318,6 +454,10 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             raise
         finally:
             await context.close()
+    return {
+        **result,
+        **await native_mcp_flow(runtime, extension, home, email, password, username),
+    }
 
 
 def main() -> int:
@@ -348,6 +488,11 @@ def main() -> int:
                 for name in package.namelist()
             )
             package.extractall(extension)
+        trusted_extension = Path("/opt") / (
+            "vaultwarden-native-fixture-" + secrets.token_hex(8)
+        )
+        command(["sudo", "cp", "-R", str(extension), str(trusted_extension)])
+        extension = trusted_extension
         suffix = secrets.token_hex(5)
         vault, proxy = "vw-native-" + suffix, "vw-native-tls-" + suffix
         caddyfile = runtime / "Caddyfile"
@@ -479,6 +624,14 @@ def main() -> int:
             }
             else "other"
         )
+        if stage == "assertion_verification":
+            report["response_body_unavailable"] = any(
+                marker in str(error)
+                for marker in (
+                    "No resource with given identifier",
+                    "No data found for resource",
+                )
+            )
         if assertion_result:
             report["assertion_result"] = assertion_result
         if native_ui:
