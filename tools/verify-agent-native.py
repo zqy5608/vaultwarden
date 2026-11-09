@@ -347,13 +347,17 @@ def main() -> int:
         deadline = time.monotonic() + 30
         while True:
             try:
-                command(
-                    [
-                        "docker",
-                        "cp",
-                        proxy + ":/data/caddy/pki/authorities/local/root.crt",
-                        str(ca),
-                    ]
+                # Docker's archive copy cannot read tmpfs; export only the public CA.
+                ca.write_bytes(
+                    command(
+                        [
+                            "docker",
+                            "exec",
+                            proxy,
+                            "cat",
+                            "/data/caddy/pki/authorities/local/root.crt",
+                        ]
+                    )
                 )
                 with urllib.request.urlopen(
                     HTTPS + "/alive",
