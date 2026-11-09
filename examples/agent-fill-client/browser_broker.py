@@ -10,6 +10,7 @@ import json
 import os
 import re
 import stat
+import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -332,6 +333,8 @@ class BrowserBroker:
             or profile.stat().st_mode & 0o077
         ):
             raise BrokerError("private_native_runtime_required")
+        # Reopening an extension cache can retain account state after failed approval.
+        profile = Path(tempfile.mkdtemp(prefix="browser-", dir=profile))
         self.native_context = await self.playwright.chromium.launch_persistent_context(
             str(profile),
             channel="chromium",

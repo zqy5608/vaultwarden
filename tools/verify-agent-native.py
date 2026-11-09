@@ -468,9 +468,20 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             await rp.close()
             broker.sessions.pop("webauthn")
             await context.clear_cookies()
+            mcp_result = await native_mcp_flow(
+                runtime, broker, page, password, username
+            )
+            progress("native_restart_requires_operator")
+            await broker.close()
+            await broker._start()
+            fresh = broker.native_context.pages[0]
+            await fresh.locator("#email").wait_for(state="visible")
+            assert await fresh.locator("#email").input_value() == ""
+            assert not await broker.native_context.cookies("https://webauthn.io")
             return {
                 **result,
-                **await native_mcp_flow(runtime, broker, page, password, username),
+                **mcp_result,
+                "native_restart_requires_operator": "passed",
             }
         except Exception:
             if stage in {

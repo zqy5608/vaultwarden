@@ -90,6 +90,12 @@ administrator's temporary SSH channel, can provide that UI without opening a
 public desktop or adding UI access to the MCP key. Disable clipboard sharing.
 Validate this channel before the operator enters any credential.
 
+Version 0.1.4 creates a fresh private browser profile on every browser start,
+including recovery after expired or failed approval. The profile container is
+volatile; no old directory is reused or manually deleted. Re-enrollment after
+closure is intentional. A real native restart check must return to an empty
+email login form with no website cookies; the encrypted server item is retained.
+
 The MCP contract remains three tools. A passkey request may return
 `needs_approval`; subsequent status calls check the approved success path and
 the expected account. Approval expires after a bounded interval. Only the
