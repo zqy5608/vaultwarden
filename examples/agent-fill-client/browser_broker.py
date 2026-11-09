@@ -365,9 +365,10 @@ class BrowserBroker:
             "page",
             lambda page: asyncio.create_task(self._watch_native_verification(page)),
         )
-        for page in self.native_context.pages:
-            await self._quiet_close(page)
         operator = await self.native_context.new_page()
+        for page in self.native_context.pages:
+            if page is not operator:
+                await self._quiet_close(page)
         await operator.goto(self.native_extension_origin + "/popup/index.html#/login")
 
     async def _watch_native_verification(self, page) -> None:

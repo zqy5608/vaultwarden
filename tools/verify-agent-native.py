@@ -13,7 +13,6 @@ import hashlib
 import http.cookiejar
 import json
 import os
-import re
 import runpy
 import secrets
 import signal
@@ -347,11 +346,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 f"chrome-extension://{extension_id}/popup/index.html#/intro-carousel"
             )
             await page.get_by_role("button", name="Log in", exact=True).click()
-            await page.wait_for_url(
-                re.compile(r"#/(default-password-manager-prompt|login)$")
-            )
-            if "default-password-manager-prompt" in page.url:
-                await page.get_by_role("button", name="Skip", exact=True).click()
+            await page.get_by_role("button", name="Skip", exact=True).click()
             await page.locator("environment-selector").get_by_role("button").click()
             await page.get_by_role("menuitem", name="self-hosted").click()
             await page.locator("#self_hosted_env_settings_form_input_base_url").fill(
@@ -474,15 +469,12 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("native_restart_requires_operator")
             await broker.close()
             await broker._start()
-            fresh = await broker.native_context.new_page()
+            fresh = broker.native_context.pages[0]
             await fresh.goto(
-                broker.native_extension_origin + "/popup/index.html#/login"
+                broker.native_extension_origin + "/popup/index.html#/intro-carousel"
             )
-            await fresh.locator(
-                "#email:visible, button:has-text('Skip'):visible"
-            ).first.wait_for()
-            if await fresh.get_by_role("button", name="Skip", exact=True).is_visible():
-                await fresh.get_by_role("button", name="Skip", exact=True).click()
+            await fresh.get_by_role("button", name="Log in", exact=True).click()
+            await fresh.get_by_role("button", name="Skip", exact=True).click()
             await fresh.locator("#email").wait_for(state="visible")
             assert await fresh.locator("#email").input_value() == ""
             assert not await broker.native_context.cookies("https://webauthn.io")
