@@ -77,6 +77,7 @@ def observe(response) -> None:
 
 async def open_provider_login(page) -> None:
     """Follow the fresh profile's actual guards instead of racing hash navigation."""
+    await page.bring_to_front()
     panels = page.locator(
         "environment-selector, app-intro-carousel, autofill-default-password-manager-prompt"
     )
@@ -96,7 +97,14 @@ async def open_provider_login(page) -> None:
             else panel.locator("#default-password-manager-prompt_button_skip-for-now")
         )
         await button.click()
-        await panel.wait_for(state="detached")
+        try:
+            await panel.wait_for(state="hidden")
+        finally:
+            native_ui["onboarding_route"] = urlsplit(page.url).fragment.split("?")[0]
+            native_ui["onboarding_panel_visible"] = await panel.is_visible()
+            native_ui["onboarding_login_visible"] = await page.locator(
+                "environment-selector"
+            ).is_visible()
     raise AssertionError("provider_onboarding_not_completed")
 
 
