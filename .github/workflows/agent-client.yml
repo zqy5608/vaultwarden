@@ -66,7 +66,7 @@ jobs:
           Path('/run/vaultwarden-agent-automation/admin-token').write_text(secrets.token_urlsafe(48))
           PY
           trap 'docker compose -f tools/agent-automation-compose.yml stop --timeout 10 >/dev/null' EXIT
-          docker compose -f tools/agent-automation-compose.yml up -d --wait --wait-timeout 60
+          docker compose -f tools/agent-automation-compose.yml up -d
           python3 - <<'PY'
           import json, ssl, subprocess, time, urllib.request
           deadline = time.monotonic() + 30
