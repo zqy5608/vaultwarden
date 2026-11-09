@@ -1,0 +1,23 @@
+[Unit]
+Description=Private credential vault for Agent test automation
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=exec
+UMask=0077
+RuntimeDirectory=vaultwarden-agent-automation
+RuntimeDirectoryMode=0700
+LoadCredentialEncrypted=admin-token:/etc/vaultwarden-agent/automation-admin.cred
+ExecStartPre=/usr/bin/install -m 0400 %d/admin-token /run/vaultwarden-agent-automation/admin-token
+ExecStart=/usr/bin/docker compose -f /etc/vaultwarden-agent/automation-compose.yml up --abort-on-container-exit
+ExecStop=/usr/bin/docker compose -f /etc/vaultwarden-agent/automation-compose.yml stop --timeout 10
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+LimitCORE=0
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target
