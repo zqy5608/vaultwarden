@@ -654,6 +654,8 @@ def main() -> int:
         admin_path = runtime / "fixture-admin"
         admin_path.write_text(FIXTURE_ADMIN)
         admin_path.chmod(0o600)
+        # With all capabilities dropped, container root cannot read the runner's 0600 file.
+        command(["sudo", "chown", "0:0", str(admin_path)])
         containers.append(vault)
         command(
             [
@@ -846,27 +848,6 @@ def main() -> int:
             report["synthetic_ui_controls"] = native_ui
         if stage == "disposable_vault_tls":
             report["tls_error"] = tls_error
-            report["rp_process_status"] = (
-                relying_party.poll() if relying_party else None
-            )
-            log = (
-                (runtime / "rp.log").read_text()
-                if (runtime / "rp.log").exists()
-                else ""
-            )
-            report["rp_startup_errors"] = [
-                value
-                for value in (
-                    "No module named agent_test_site",
-                    "ModuleNotFoundError",
-                    "ImportError",
-                    "TypeError",
-                    "PermissionError",
-                    "Address already in use",
-                    "unrecognized arguments",
-                )
-                if value in log
-            ]
     finally:
         if relying_party is not None:
             relying_party.terminate()
