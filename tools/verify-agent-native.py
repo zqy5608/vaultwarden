@@ -36,7 +36,9 @@ TLS_IMAGE = (
 EXTENSION_URL = "https://github.com/bitwarden/clients/releases/download/browser-v2026.10.0/dist-chrome-2026.10.0.zip"
 EXTENSION_SHA256 = "7b9ec650b87dd8975e87a0e0bdd0c1f1a0fcf5b0a8da5ae759ec14cdffaad35d"
 HTTP = "http://127.0.0.1:18081"
-HTTPS = "https://localhost:18443"
+HTTPS = "https://localhost:24443"
+RP_HTTPS = "https://localhost:24444"
+FIXTURE_ADMIN = secrets.token_urlsafe(48)
 stage = "start"
 private_values: list[str] = []
 network_statuses: list[dict] = []
@@ -58,7 +60,7 @@ def progress(value: str) -> None:
 
 def observe(response) -> None:
     path = urlsplit(response.url).path
-    if response.url.startswith((HTTPS + "/", "https://webauthn.io/")) and path in {
+    if response.url.startswith((HTTPS + "/", RP_HTTPS + "/")) and path in {
         "/api/config",
         "/identity/accounts/prelogin",
         "/identity/connect/token",
@@ -73,15 +75,16 @@ def observe(response) -> None:
         )
 
 
-def seed_vault() -> tuple[str, str, str]:
+def seed_vault(runtime: Path) -> tuple[str, str, str, str]:
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
 
     email = "native-" + secrets.token_hex(8) + "@example.test"
     password = secrets.token_urlsafe(48)
+    site_password = secrets.token_urlsafe(32)
     username = "vw-native-" + secrets.token_hex(10)
     key = secrets.token_bytes(64)
-    private_values.extend([password, base64.b64encode(key).decode()])
+    private_values.extend([password, site_password, base64.b64encode(key).decode()])
     master = FIXTURE["derive_master_key"](password, email, 0, 600000)
     password_hash = FIXTURE["master_password_hash"](master, password)
     keypair = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -133,7 +136,7 @@ def seed_vault() -> tuple[str, str, str]:
     private_values.append(token)
     claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
     encrypt = FIXTURE["encrypt"]
-    request(
+    cipher = request(
         opener,
         HTTP + "/api/ciphers",
         "POST",
@@ -145,11 +148,43 @@ def seed_vault() -> tuple[str, str, str]:
             "reprompt": 1,
             "login": {
                 "username": encrypt(key, username.encode()),
-                "uris": [{"uri": encrypt(key, b"https://webauthn.io"), "match": 1}],
+                "password": encrypt(key, site_password.encode()),
+                "uris": [{"uri": encrypt(key, RP_HTTPS.encode()), "match": 1}],
             },
         },
     )
-    return email, password, username
+    # Password autofill must never bypass the native item's re-prompt requirement.
+    password_cipher = request(
+        opener,
+        HTTP + "/api/ciphers",
+        "POST",
+        token=token,
+        body={
+            "type": 1,
+            "name": encrypt(key, b"Password calibration"),
+            "encryptedFor": claims["sub"],
+            "reprompt": 0,
+            "login": cipher["login"],
+        },
+    )
+    config = FIXTURE["password_config"](
+        opener,
+        HTTP,
+        user_token=token,
+        item_id=password_cipher["id"],
+        email=email,
+        master_password=password,
+        user_key=key,
+        admin=FIXTURE_ADMIN,
+        site_origin=RP_HTTPS,
+        private_values=private_values,
+        headless=False,
+    )
+    config_path = runtime / "password-config.json"
+    fd = os.open(config_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as handle:
+        json.dump(config, handle)
+    return email, password, username, site_password
 
 
 async def native_mcp_flow(runtime, broker, operator, password, username) -> dict:
@@ -209,7 +244,7 @@ async def native_mcp_flow(runtime, broker, operator, password, username) -> dict
                         broker.native_extension_origin + "/"
                     )
                 ) as opened:
-                    assert (await call(client, "vault_login", "webauthn"))[
+                    assert (await call(client, "vault_login", "agent-test"))[
                         "status"
                     ] == "needs_approval"
                 prompt = await opened.value
@@ -222,14 +257,14 @@ async def native_mcp_flow(runtime, broker, operator, password, username) -> dict
                 )
                 # Let the read-only observer see the real prompt before instant fixture submission.
                 async with asyncio.timeout(5):
-                    while "webauthn" not in broker.native_verified:
+                    while "agent-test" not in broker.native_verified:
                         await asyncio.sleep(0.01)
                 await prompt.locator("#masterPassword").fill(password)
                 progress("native_mcp_confirmation")
                 await prompt.locator("[bit-dialog] button[type=submit]").click()
-                rp = broker.sessions["webauthn"][1]
-                await rp.wait_for_url("https://webauthn.io/profile")
-                assert (await call(client, "vault_status", "webauthn"))[
+                rp = broker.sessions["agent-test"][1]
+                await rp.wait_for_url(RP_HTTPS + "/profile")
+                assert (await call(client, "vault_status", "agent-test"))[
                     "status"
                 ] == "authenticated"
             async with (
@@ -238,10 +273,10 @@ async def native_mcp_flow(runtime, broker, operator, password, username) -> dict
             ):
                 await client.initialize()
                 progress("native_mcp_retained_session")
-                assert (await call(client, "vault_status", "webauthn"))[
+                assert (await call(client, "vault_status", "agent-test"))[
                     "status"
                 ] == "authenticated"
-                assert (await call(client, "vault_login", "webauthn"))[
+                assert (await call(client, "vault_login", "agent-test"))[
                     "status"
                 ] == "authenticated"
                 assert (await call(client, "vault_login", "unapproved"))[
@@ -281,7 +316,7 @@ async def native_mcp_flow(runtime, broker, operator, password, username) -> dict
                     "buttons": await active.get_by_role("button").all_text_contents(),
                 }
             )
-            rp = broker.sessions.get("webauthn")
+            rp = broker.sessions.get("agent-test")
             if rp and not rp[1].is_closed():
                 native_ui["rp_focused"] = await rp[1].evaluate("document.hasFocus()")
                 body = (await rp[1].locator("body").inner_text()).lower()
@@ -297,11 +332,6 @@ async def native_mcp_flow(runtime, broker, operator, password, username) -> dict
                     )
                     if value in body
                 ]
-                native_ui["rp_username_matches"] = (
-                    await rp[1]
-                    .locator("#input-email")
-                    .evaluate("(input, expected) => input.value === expected", username)
-                )
             assert not any(value in json.dumps(native_ui) for value in private_values)
         raise
     finally:
@@ -313,18 +343,35 @@ async def native_mcp_flow(runtime, broker, operator, password, username) -> dict
 async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
     from browser_broker import BrowserBroker, validate_config
 
-    email, password, username = seed_vault()
+    email, password, username, site_password = seed_vault(runtime)
+    site_opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
+        urllib.request.HTTPSHandler(
+            context=ssl.create_default_context(
+                cafile=str(runtime / "ca.crt")
+                if RP_HTTPS.startswith("https://localhost:")
+                else None
+            )
+        ),
+    )
+    site_opener.addheaders = [("Origin", RP_HTTPS)]
+    FIXTURE["request"](
+        site_opener,
+        RP_HTTPS + "/register",
+        "POST",
+        body={"username": username, "password": site_password},
+    )
     config = {
         "provider": "bitwarden-extension",
         "extension_path": str(extension),
         "profile_path": str(runtime / "profile"),
         "sites": {
-            "webauthn": {
-                "login_url": "https://webauthn.io/",
+            "agent-test": {
+                "login_url": RP_HTTPS + "/login",
                 "passkey_selector": "#login-button",
                 "success_path": "/profile",
-                "success_selector": 'h3:has-text("You\'re logged in!")',
-                "account_selector": f"h3 strong:has-text('{username}')",
+                "success_selector": "#profile",
+                "account_selector": f"meta[name='agent-test-user'][content='{username}']",
                 "resource_origins": [],
             }
         },
@@ -335,6 +382,11 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
     previous = {name: os.environ.get(name) for name in ("HOME", "XDG_CONFIG_HOME")}
     try:
         os.environ.update(HOME=str(home), XDG_CONFIG_HOME=str(home / "config"))
+        progress("owned_rp_password_mcp")
+        with (runtime / "password-mcp.log").open("w+") as diagnostics:
+            password_result = await FIXTURE["call_mcp"](
+                runtime / "password-config.json", diagnostics, private_values
+            )
         await broker._start()
         context = broker.native_context
         try:
@@ -367,17 +419,25 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("native_registration")
             rp = await context.new_page()
             rp.set_default_timeout(20000)
-            broker.sessions["webauthn"] = (context, rp)
-            await rp.goto(
-                "https://webauthn.io/?authUserVerification=required",
-                wait_until="domcontentloaded",
-            )
+            broker.sessions["agent-test"] = (context, rp)
+            await rp.goto(RP_HTTPS + "/login", wait_until="domcontentloaded")
             await rp.locator("#input-email").fill(username)
+            await rp.locator("#password").fill(site_password)
+            await rp.locator("#password-submit").click()
+            await rp.wait_for_url(RP_HTTPS + "/profile")
             progress("registration_request")
             async with context.expect_page() as opened:
                 await rp.locator("#register-button").click()
             prompt = await opened.value
             await prompt.wait_for_url(f"chrome-extension://{extension_id}/**")
+            progress("registration_popup_viewport")
+            session = await context.new_cdp_session(prompt)
+            window = await session.send("Browser.getWindowForTarget")
+            await session.detach()
+            assert await prompt.evaluate(
+                "bounds => innerWidth <= bounds.width && innerHeight <= bounds.height",
+                window["bounds"],
+            )
             progress("registration_native_item")
             async with rp.expect_response("**/registration/verification") as verified:
                 await (
@@ -392,6 +452,8 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 await prompt.locator("[bit-dialog] button[type=submit]").click()
             assert (await (await verified.value).json())["verified"] is True
             progress("native_registration_verified")
+            await rp.locator("#logout").click()
+            await rp.wait_for_url(RP_HTTPS + "/login")
             progress("native_reprompt_cancel")
             authentication_requests = []
 
@@ -406,6 +468,9 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                         and result.get("verified") is True,
                     }
                 )
+                replay = await route.fetch()
+                assert replay.status == 400
+                assert (await replay.json())["error"] == "challenge_unavailable"
                 await route.fulfill(response=response)
 
             await rp.route("**/authentication/verification", forward_verification)
@@ -448,7 +513,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             assert (await verified.value).status == 200
             assert assertion_result["verified"]
             progress("assertion_verified")
-            await rp.wait_for_url("https://webauthn.io/profile")
+            await rp.wait_for_url(RP_HTTPS + "/profile")
             progress("assertion_account")
             assert username in await rp.locator("body").inner_text()
             progress("assertion_retained_session")
@@ -460,9 +525,12 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 "master_reprompt_cancel": "passed",
                 "retained_session": "passed",
                 "tls_validation": "enabled",
+                "native_popup_viewport": "passed",
+                "assertion_replay_rejected": "passed",
+                "password_mcp_login": password_result["real_https_login"],
             }
             await rp.close()
-            broker.sessions.pop("webauthn")
+            broker.sessions.pop("agent-test")
             await context.clear_cookies()
             mcp_result = await native_mcp_flow(
                 runtime, broker, page, password, username
@@ -481,7 +549,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("native_restart_login")
             await fresh.locator("#email").wait_for(state="visible")
             assert await fresh.locator("#email").input_value() == ""
-            assert not await broker.native_context.cookies("https://webauthn.io")
+            assert not await broker.native_context.cookies(RP_HTTPS)
             return {
                 **result,
                 **mcp_result,
@@ -517,14 +585,19 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
 
 
 def main() -> int:
+    global RP_HTTPS
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--extension-archive", type=Path)
+    parser.add_argument("--site-origin", choices=["https://agent-test.bo0lean.com"])
     args = parser.parse_args()
+    if args.site_origin:
+        RP_HTTPS = args.site_origin
     runtime = Path(
         tempfile.mkdtemp(prefix="vaultwarden-native-verification-")
     ).resolve()
     containers: list[str] = []
+    relying_party = None
     report = {"status": "failed"}
 
     def interrupted(signum, frame):
@@ -556,9 +629,31 @@ def main() -> int:
         vault, proxy = "vw-native-" + suffix, "vw-native-tls-" + suffix
         caddyfile = runtime / "Caddyfile"
         caddyfile.write_text(
-            "{\n admin off\n skip_install_trust\n auto_https disable_redirects\n}\nhttps://localhost:18443 {\n bind 127.0.0.1\n tls internal\n reverse_proxy 127.0.0.1:18081\n}\n"
+            "{\n admin off\n skip_install_trust\n auto_https disable_redirects\n}\n"
+            + HTTPS
+            + " {\n bind 127.0.0.1\n tls internal\n reverse_proxy 127.0.0.1:18081\n}\n"
+            + "https://localhost:24444 {\n bind 127.0.0.1\n tls internal\n reverse_proxy 127.0.0.1:18082\n}\n"
         )
+        if args.site_origin is None:
+            with (runtime / "rp.log").open("wb") as diagnostics:
+                relying_party = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "agent_test_site",
+                        "--origin",
+                        RP_HTTPS,
+                        "--database",
+                        str(runtime / "rp.sqlite3"),
+                    ],
+                    stdout=diagnostics,
+                    stderr=subprocess.STDOUT,
+                )
         progress("disposable_vault_tls")
+        private_values.append(FIXTURE_ADMIN)
+        admin_path = runtime / "fixture-admin"
+        admin_path.write_text(FIXTURE_ADMIN)
+        admin_path.chmod(0o600)
         containers.append(vault)
         command(
             [
@@ -576,6 +671,14 @@ def main() -> int:
                 "ALL",
                 "--security-opt",
                 "no-new-privileges",
+                "--volume",
+                str(admin_path) + ":/run/secrets/admin:ro",
+                "--env",
+                "ADMIN_TOKEN_FILE=/run/secrets/admin",
+                "--env",
+                "AGENT_API_ENABLED=true",
+                "--env",
+                "AGENT_REQUIRE_FOLDER_ACL=false",
                 "--env",
                 "ROCKET_ADDRESS=127.0.0.1",
                 "--env",
@@ -634,6 +737,16 @@ def main() -> int:
                 with urllib.request.urlopen(
                     HTTPS + "/alive",
                     context=ssl.create_default_context(cafile=str(ca)),
+                    timeout=5,
+                ) as response:
+                    assert response.status == 200
+                with urllib.request.urlopen(
+                    RP_HTTPS + "/health",
+                    context=(
+                        ssl.create_default_context()
+                        if args.site_origin
+                        else ssl.create_default_context(cafile=str(ca))
+                    ),
                     timeout=5,
                 ) as response:
                     assert response.status == 200
@@ -730,11 +843,20 @@ def main() -> int:
         if stage == "disposable_vault_tls":
             report["tls_error"] = tls_error
     finally:
+        if relying_party is not None:
+            relying_party.terminate()
+            try:
+                relying_party.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                relying_party.kill()
+                relying_party.wait()
         captured = [
             subprocess.run(["docker", "logs", name], check=False, capture_output=True)
             for name in containers
         ]
         diagnostics = b"".join(result.stdout + result.stderr for result in captured)
+        if (runtime / "rp.log").exists():
+            diagnostics += (runtime / "rp.log").read_bytes()
         if stage == "disposable_vault_tls" and not private_values:
             inspected = [
                 subprocess.run(
@@ -767,11 +889,18 @@ def main() -> int:
             for name in containers
         ]
         report["test_containers_stopped"] = all(stopped)
+        report["test_site_stopped"] = (
+            relying_party is None or relying_party.poll() is not None
+        )
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report), flush=True)
     return (
-        0 if report["status"] == "passed" and report["test_containers_stopped"] else 1
+        0
+        if report["status"] == "passed"
+        and report["test_containers_stopped"]
+        and report["test_site_stopped"]
+        else 1
     )
 
 

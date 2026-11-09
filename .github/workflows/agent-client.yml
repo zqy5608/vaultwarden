@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "examples/agent-fill-client/**"
+      - "examples/agent-test-site/**"
       - "tools/verify-agent-mcp.py"
       - "tools/verify-agent-native.py"
       - "tools/agent-*.sh"
@@ -14,6 +15,7 @@ on:
   pull_request:
     paths:
       - "examples/agent-fill-client/**"
+      - "examples/agent-test-site/**"
       - "tools/verify-agent-mcp.py"
       - "tools/verify-agent-native.py"
       - "tools/agent-*.sh"
@@ -36,7 +38,7 @@ jobs:
       - name: Install the packaged client and private browser
         run: |
           python3 -m venv "$RUNNER_TEMP/agent-client"
-          "$RUNNER_TEMP/agent-client/bin/pip" install './examples/agent-fill-client[mcp]'
+          "$RUNNER_TEMP/agent-client/bin/pip" install './examples/agent-fill-client[mcp]' './examples/agent-test-site[test]'
           "$RUNNER_TEMP/agent-client/bin/python" -m playwright install --with-deps --only-shell chromium
       - name: Allow Chromium sandbox user namespaces
         run: |
@@ -59,6 +61,7 @@ jobs:
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_setup.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_broker_rpc.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_native.py
+          "$RUNNER_TEMP/agent-client/bin/python" -m unittest discover -s examples/agent-test-site -p 'test_*.py'
 
   native-provider:
     runs-on: ubuntu-24.04
@@ -72,7 +75,7 @@ jobs:
           export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/agent-native-browsers"
           printf '%s\n' "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" >> "$GITHUB_ENV"
           python3 -m venv "$RUNNER_TEMP/agent-native"
-          "$RUNNER_TEMP/agent-native/bin/pip" install './examples/agent-fill-client[mcp]'
+          "$RUNNER_TEMP/agent-native/bin/pip" install './examples/agent-fill-client[mcp]' './examples/agent-test-site'
           "$RUNNER_TEMP/agent-native/bin/python" -m playwright install --with-deps chromium
           sudo apt-get install -y libnss3-tools
       - name: Allow the full Chromium sandbox
@@ -94,6 +97,8 @@ jobs:
           gh release download browser-v2026.10.0 --repo bitwarden/clients \
             --pattern dist-chrome-2026.10.0.zip --skip-existing \
             --dir "$RUNNER_TEMP/native-extension"
+      - name: Build the isolated test service with locked dependencies
+        run: docker build --quiet -t vaultwarden-agent-test:ci ./examples/agent-test-site
       - name: Verify native passkeys with disposable credentials
         run: |
           xvfb-run -a -s "-screen 0 1440x1000x24 -nolisten tcp" \
