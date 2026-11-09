@@ -1,5 +1,25 @@
 # Owned Agent authentication test site
 
+## Current unattended acceptance
+
+Use the existing scoped password broker for the user's requested unattended
+workflow. Native passkey confirmation is optional and is not a deployment gate.
+Create a separate generated automation identity for the owned RP, leaving the
+operator's account and passkey intact. An isolated, loopback-only Vaultwarden
+stores only that identity; registration is disabled except for its admin invite.
+Enable folder ACLs and keep the broker's three site-bound MCP tools unchanged.
+
+Systemd encrypted credentials hold scoped tokens and the account key at rest;
+only the unprivileged broker receives a private, read-only runtime credential.
+Headless Chromium fills the owned HTTPS form without exposing secrets to the AI.
+TLS, sandboxing, exact origin/account checks and single-use fills remain.
+
+Acceptance requires direct current-chat login, retained state across independent
+MCP connections, denied destinations, revocation blocking a fresh login and
+rotation restoring it, plus unattended service restart. Remove task-installed
+VNC software, forwarding, display units and temporary fixtures after switching.
+Keep production vault data and the operator's existing credentials intact.
+
 ## Scope and deployment
 
 Deploy an independent test service on the existing Oracle host at

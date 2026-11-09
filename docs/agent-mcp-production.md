@@ -5,6 +5,77 @@ Use the existing server API and deploy the client under a separate unprivileged
 account. The AI host receives only an SSH key restricted to the MCP protocol.
 Administrators and the trusted process remain outside this isolation guarantee.
 
+## Default unattended owned-site deployment
+
+The owned test site uses the existing password broker in headless mode. A new,
+generated machine identity is separate from the operator's `agent-test` account
+and its passkey. No human vault password or personal credential is required.
+The native passkey workflow below remains optional; it is not the default and
+must not hold up unattended acceptance.
+
+Keep that machine identity in a separate Vaultwarden bound only to loopback,
+with public registration disabled and folder ACLs required. Reuse the verified
+production image by digest, without mounting production data or changing its
+configuration. Its admin token and broker config are encrypted using
+`systemd-creds --with-key=host`; plaintext exists only in trusted process memory
+or private runtime credentials under `/run`. This protects the AI boundary,
+not against the host administrator. It does not automate personal-site MFA.
+
+Install the following root-owned deployment files. Keep `/etc/vaultwarden-agent`
+root-owned 0700, and create `/var/lib/vaultwarden-agent-automation` and
+`/var/lib/vaultwarden-agent-automation-tls` as root-owned 0700 directories.
+
+| Source | Destination |
+| --- | --- |
+| `tools/agent-automation-compose.yml` | `/etc/vaultwarden-agent/automation-compose.yml` |
+| `tools/agent-automation-Caddyfile` | `/etc/vaultwarden-agent/automation-Caddyfile` |
+| `tools/agent-automation-setup.py` | `/opt/vaultwarden-agent/bin/agent-automation-setup.py` |
+| `tools/verify-agent-mcp.py` | `/opt/vaultwarden-agent/bin/verify-agent-mcp.py` (shared API/crypto helpers) |
+| `tools/vaultwarden-agent-automation.service` | `/etc/systemd/system/vaultwarden-agent-automation.service` |
+| `tools/vaultwarden-agent-password.service` | `/etc/systemd/system/vaultwarden-agent-broker.service` |
+| `tools/agent-mcp-ssh.sh` | `/opt/vaultwarden-agent/bin/mcp-ssh` (0755) |
+
+The encrypted config is delivered by `LoadCredentialEncrypted` directly to the
+unprivileged broker. The vault unit copies its runtime admin credential to a
+root-only `/run/vaultwarden-agent-automation` directory so Docker can bind-mount
+it across the service's private credential namespace. Compose stops before that
+directory is removed. No credential belongs in arguments, environment variables,
+source control, logs, reports or AI-visible output.
+
+After recording a private rollback and verifying the systemd units, run as root:
+
+```bash
+systemctl daemon-reload
+/opt/vaultwarden-agent/venv/bin/python /opt/vaultwarden-agent/bin/agent-automation-setup.py init
+systemctl enable vaultwarden-agent-automation.service vaultwarden-agent-broker.service
+```
+
+Initialization invites only the generated account in the private vault, creates
+an independent account through the owned website's normal HTTPS registration,
+stores a type-2 encrypted login in a dedicated folder, publishes its exact URI
+and issues scoped credentials. The generated master password is discarded after
+normal authentication and key unwrapping; only the encrypted operational key and
+scoped tokens persist. Nonsecret item/folder/token IDs are recorded in
+`/etc/vaultwarden-agent/automation-state.json`. A failed initialization requires
+inspection and rollback of this isolated test state before retrying.
+
+The existing restricted SSH connection always uses the shared broker socket;
+no Codex reload or display connection is needed when switching implementations.
+Verify actual current-chat login and account-specific success, retained state
+from independent connections, and denial of an unapproved site. Use the same
+setup script's `revoke` action to revoke both scoped credentials and restart the
+broker, then confirm a fresh MCP login fails. Its `rotate` action seals new
+credentials, revokes the previous IDs and restarts the broker; confirm login
+recovers. Restart both services and verify unattended login once more.
+
+After the headless flow passes, disable the native display unit, uninstall only
+task-installed TigerVNC packages, close its task SSH forwarding and remove the
+native runtime units/launchers/extension/proxy. Retire the temporary signing
+agent. Move task fixtures, staging and obsolete native configuration to Trash
+or one private rollback archive; preserve production data, original accounts
+and passkeys, the live restricted MCP identity and its known-hosts file. Do not
+prune unrelated Docker volumes or remove headless Chromium dependencies.
+
 ## Operator prerequisites
 
 - A selected HTTPS website using a same-origin, visible username/password POST
@@ -150,10 +221,9 @@ with that CA using normal TLS validation. No system trust-store change is needed
 Copy the approved native profile metadata to
 `/var/lib/vaultwarden-agent/private/native.json`, owned by the broker and 0600.
 Replace the expected GitHub username and independently confirm its selectors.
-The native config contains no credentials. Its presence makes the forced SSH
-launcher use the shared broker socket; a missing broker fails closed. Removing
-activation means moving this config to a private rollback path and restoring the
-previous launcher, not weakening SSH restrictions.
+The native config contains no credentials. The forced SSH launcher always uses
+the shared broker socket; a missing broker fails closed. Switching providers
+changes the broker service, without weakening SSH restrictions.
 
 Run `systemd-analyze verify` on the installed units, reload systemd, and start
 `vaultwarden-agent-broker.service`. Its private display shares a temporary X
