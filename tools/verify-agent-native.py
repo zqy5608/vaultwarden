@@ -379,9 +379,16 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
     validate_config(config)
     broker = BrowserBroker(config)
     progress("native_browser_launch")
-    previous = {name: os.environ.get(name) for name in ("HOME", "XDG_CONFIG_HOME")}
+    previous = {
+        name: os.environ.get(name)
+        for name in ("HOME", "XDG_CONFIG_HOME", "NODE_EXTRA_CA_CERTS")
+    }
     try:
-        os.environ.update(HOME=str(home), XDG_CONFIG_HOME=str(home / "config"))
+        os.environ.update(
+            HOME=str(home),
+            XDG_CONFIG_HOME=str(home / "config"),
+            NODE_EXTRA_CA_CERTS=str(runtime / "ca.crt"),
+        )
         progress("owned_rp_password_mcp")
         with (runtime / "password-mcp.log").open("w+") as diagnostics:
             password_result = await FIXTURE["call_mcp"](
@@ -459,19 +466,24 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
 
             async def forward_verification(route):
                 # Buffer the real response before immediate navigation discards its CDP body.
-                response = await route.fetch()
-                result = await response.json()
-                assertion_result.update(
-                    {
-                        "json_object": isinstance(result, dict),
-                        "verified": isinstance(result, dict)
-                        and result.get("verified") is True,
-                    }
-                )
-                replay = await route.fetch()
-                assert replay.status == 400
-                assert (await replay.json())["error"] == "challenge_unavailable"
-                await route.fulfill(response=response)
+                try:
+                    response = await route.fetch()
+                    result = await response.json()
+                    assertion_result.update(
+                        {
+                            "json_object": isinstance(result, dict),
+                            "verified": isinstance(result, dict)
+                            and result.get("verified") is True,
+                        }
+                    )
+                    replay = await route.fetch()
+                    assert replay.status == 400
+                    assert (await replay.json())["error"] == "challenge_unavailable"
+                    await route.fulfill(response=response)
+                except Exception:
+                    # Unhandled request errors can print headers containing a session cookie.
+                    assertion_result["route_failed"] = True
+                    await route.abort()
 
             await rp.route("**/authentication/verification", forward_verification)
             rp.on(
