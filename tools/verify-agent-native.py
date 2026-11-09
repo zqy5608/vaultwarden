@@ -56,6 +56,23 @@ def progress(value: str) -> None:
     print(json.dumps({"stage": value}), flush=True)
 
 
+def observe(response) -> None:
+    path = urlsplit(response.url).path
+    if response.url.startswith((HTTPS + "/", "https://webauthn.io/")) and path in {
+        "/api/config",
+        "/identity/accounts/prelogin",
+        "/identity/connect/token",
+        "/api/sync",
+        "/registration/options",
+        "/registration/verification",
+        "/authentication/options",
+        "/authentication/verification",
+    }:
+        network_statuses.append(
+            {"endpoint": path, "status": response.status, "phase": stage}
+        )
+
+
 def seed_vault() -> tuple[str, str, str]:
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
@@ -196,6 +213,17 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
                 else:
                     os.environ[name] = value
         context = broker.native_context
+        context.on("response", observe)
+        original_close = broker._quiet_close
+
+        async def record_close(target):
+            if getattr(target, "url", "").startswith(
+                broker.native_extension_origin + "/"
+            ):
+                native_ui["provider_closed_by_broker"] = True
+            await original_close(target)
+
+        broker._quiet_close = record_close
         operator = context.pages[0]
         await operator.wait_for_url(re.compile(r"#/(login|lock|tabs/vault)$"))
         if not operator.url.endswith("#/tabs/vault"):
@@ -300,6 +328,26 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
                     "buttons": await active.get_by_role("button").all_text_contents(),
                 }
             )
+            rp = broker.sessions.get("webauthn")
+            if rp and not rp[1].is_closed():
+                body = (await rp[1].locator("body").inner_text()).lower()
+                native_ui["rp_error_categories"] = [
+                    value
+                    for value in (
+                        "notallowederror",
+                        "securityerror",
+                        "typeerror",
+                        "not focused",
+                        "not supported",
+                        "aborterror",
+                    )
+                    if value in body
+                ]
+                native_ui["rp_username_matches"] = (
+                    await rp[1]
+                    .locator("#input-email")
+                    .evaluate("(input, expected) => input.value === expected", username)
+                )
             assert not any(value in json.dumps(native_ui) for value in private_values)
         raise
     finally:
@@ -335,25 +383,6 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             ],
         )
         try:
-
-            def observe(response):
-                path = urlsplit(response.url).path
-                if response.url.startswith(
-                    (HTTPS + "/", "https://webauthn.io/")
-                ) and path in {
-                    "/api/config",
-                    "/identity/accounts/prelogin",
-                    "/identity/connect/token",
-                    "/api/sync",
-                    "/registration/options",
-                    "/registration/verification",
-                    "/authentication/options",
-                    "/authentication/verification",
-                }:
-                    network_statuses.append(
-                        {"endpoint": path, "status": response.status}
-                    )
-
             context.on("response", observe)
             worker = (
                 context.service_workers[0]
