@@ -152,32 +152,13 @@ def seed_vault() -> tuple[str, str, str]:
     return email, password, username
 
 
-async def native_mcp_flow(runtime, extension, home, email, password, username) -> dict:
+async def native_mcp_flow(runtime, broker, operator, password, username) -> dict:
     from broker_rpc import start_broker
-    from browser_broker import BrowserBroker, validate_config
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
-    config = {
-        "provider": "bitwarden-extension",
-        "extension_path": str(extension),
-        "profile_path": str(runtime / "profile"),
-        "sites": {
-            "webauthn": {
-                "login_url": "https://webauthn.io/",
-                "passkey_selector": "#login-button",
-                "success_path": "/profile",
-                "success_selector": 'h3:has-text("You\'re logged in!")',
-                "account_selector": f"h3 strong:has-text('{username}')",
-                "resource_origins": [],
-            }
-        },
-    }
-    validate_config(config)
-    broker = BrowserBroker(config)
     socket = runtime / "broker.sock"
     server = None
-    operator = None
     records = []
     parameters = StdioServerParameters(
         command=sys.executable,
@@ -202,18 +183,7 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
 
     try:
         progress("native_mcp_start")
-        previous = {name: os.environ.get(name) for name in ("HOME", "XDG_CONFIG_HOME")}
-        try:
-            os.environ.update(HOME=str(home), XDG_CONFIG_HOME=str(home / "config"))
-            await broker._start()
-        finally:
-            for name, value in previous.items():
-                if value is None:
-                    os.environ.pop(name, None)
-                else:
-                    os.environ[name] = value
         context = broker.native_context
-        context.on("response", observe)
         original_close = broker._quiet_close
 
         async def record_close(target):
@@ -224,27 +194,6 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
             await original_close(target)
 
         broker._quiet_close = record_close
-        operator = context.pages[0]
-        await operator.wait_for_url(re.compile(r"#/(login|lock|tabs/vault)$"))
-        if not operator.url.endswith("#/tabs/vault"):
-            progress("native_mcp_private_unlock")
-            await operator.locator(
-                "#email:visible, #masterPassword:visible, input[name=masterPassword]:visible"
-            ).first.wait_for()
-            if await operator.locator("#email").is_visible():
-                await operator.locator("#email").fill(email)
-                await operator.get_by_role(
-                    "button", name="Continue", exact=True
-                ).click()
-            await operator.locator("#masterPassword, input[name=masterPassword]").fill(
-                password
-            )
-            await operator.get_by_role(
-                "button", name=re.compile(r"^(Unlock|Log in)$")
-            ).click()
-            await operator.wait_for_url(
-                broker.native_extension_origin + "/popup/index.html#/tabs/vault"
-            )
         server = await start_broker(socket, broker)
         with (runtime / "mcp.log").open("w+") as diagnostics:
             async with (
@@ -355,43 +304,39 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
         if server is not None:
             server.close()
             await server.wait_closed()
-        await broker.close()
 
 
 async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
-    from playwright.async_api import async_playwright
+    from browser_broker import BrowserBroker, validate_config
 
     email, password, username = seed_vault()
+    config = {
+        "provider": "bitwarden-extension",
+        "extension_path": str(extension),
+        "profile_path": str(runtime / "profile"),
+        "sites": {
+            "webauthn": {
+                "login_url": "https://webauthn.io/",
+                "passkey_selector": "#login-button",
+                "success_path": "/profile",
+                "success_selector": 'h3:has-text("You\'re logged in!")',
+                "account_selector": f"h3 strong:has-text('{username}')",
+                "resource_origins": [],
+            }
+        },
+    }
+    validate_config(config)
+    broker = BrowserBroker(config)
     progress("native_browser_launch")
-    (runtime / "profile").mkdir(mode=0o700)
-    async with async_playwright() as engine:
-        context = await engine.chromium.launch_persistent_context(
-            str(runtime / "profile"),
-            channel="chromium",
-            headless=False,
-            chromium_sandbox=True,
-            service_workers="block",
-            accept_downloads=False,
-            env={
-                **os.environ,
-                "HOME": str(home),
-                "XDG_CONFIG_HOME": str(home / "config"),
-            },
-            ignore_default_args=["--disable-extensions"],
-            args=[
-                f"--disable-extensions-except={extension}",
-                f"--load-extension={extension}",
-            ],
-        )
+    previous = {name: os.environ.get(name) for name in ("HOME", "XDG_CONFIG_HOME")}
+    try:
+        os.environ.update(HOME=str(home), XDG_CONFIG_HOME=str(home / "config"))
+        await broker._start()
+        context = broker.native_context
         try:
             context.on("response", observe)
-            worker = (
-                context.service_workers[0]
-                if context.service_workers
-                else await context.wait_for_event("serviceworker")
-            )
-            extension_id = worker.url.split("/")[2]
-            page = await context.new_page()
+            extension_id = urlsplit(broker.native_extension_origin).netloc
+            page = context.pages[0]
             page.set_default_timeout(20000)
             progress("native_environment")
             await page.goto(
@@ -422,6 +367,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("native_registration")
             rp = await context.new_page()
             rp.set_default_timeout(20000)
+            broker.sessions["webauthn"] = (context, rp)
             await rp.goto(
                 "https://webauthn.io/?authUserVerification=required",
                 wait_until="domcontentloaded",
@@ -515,6 +461,13 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 "retained_session": "passed",
                 "tls_validation": "enabled",
             }
+            await rp.close()
+            broker.sessions.pop("webauthn")
+            await context.clear_cookies()
+            return {
+                **result,
+                **await native_mcp_flow(runtime, broker, page, password, username),
+            }
         except Exception:
             if stage in {
                 "native_environment",
@@ -535,12 +488,13 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                     value in json.dumps(native_ui) for value in private_values
                 )
             raise
-        finally:
-            await context.close()
-    return {
-        **result,
-        **await native_mcp_flow(runtime, extension, home, email, password, username),
-    }
+    finally:
+        await broker.close()
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def main() -> int:
