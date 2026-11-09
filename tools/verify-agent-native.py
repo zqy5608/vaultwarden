@@ -220,6 +220,10 @@ async def native_mcp_flow(runtime, broker, operator, password, username) -> dict
                     .get_by_role("button")
                     .click()
                 )
+                # Let the read-only observer see the real prompt before instant fixture submission.
+                async with asyncio.timeout(5):
+                    while "webauthn" not in broker.native_verified:
+                        await asyncio.sleep(0.01)
                 await prompt.locator("#masterPassword").fill(password)
                 progress("native_mcp_confirmation")
                 await prompt.locator("[bit-dialog] button[type=submit]").click()
@@ -253,7 +257,7 @@ async def native_mcp_flow(runtime, broker, operator, password, username) -> dict
             "mcp_secret_scan": "passed",
         }
     except Exception:
-        if operator is not None:
+        if operator is not None and broker.native_context is not None:
             pages = broker.native_context.pages
             active = next(
                 (
