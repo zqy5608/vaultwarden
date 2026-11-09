@@ -54,6 +54,9 @@ def progress(value: str) -> None:
 
 
 def seed_vault() -> tuple[str, str, str]:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
     email = "native-" + secrets.token_hex(8) + "@example.test"
     password = secrets.token_urlsafe(48)
     username = "vw-native-" + secrets.token_hex(10)
@@ -61,6 +64,17 @@ def seed_vault() -> tuple[str, str, str]:
     private_values.extend([password, base64.b64encode(key).decode()])
     master = FIXTURE["derive_master_key"](password, email, 0, 600000)
     password_hash = FIXTURE["master_password_hash"](master, password)
+    keypair = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_der = keypair.private_bytes(
+        serialization.Encoding.DER,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    public_der = keypair.public_key().public_bytes(
+        serialization.Encoding.DER,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    private_values.append(base64.b64encode(private_der).decode())
     request = FIXTURE["request"]
     opener = urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
@@ -83,6 +97,10 @@ def seed_vault() -> tuple[str, str, str]:
             "kdf": 0,
             "kdfIterations": 600000,
             "emailVerificationToken": verification,
+            "keys": {
+                "publicKey": base64.b64encode(public_der).decode(),
+                "encryptedPrivateKey": FIXTURE["encrypt"](key, private_der),
+            },
         },
     )
     login = request(
