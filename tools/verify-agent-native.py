@@ -372,6 +372,21 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("native_registration_verified")
             progress("native_reprompt_cancel")
             authentication_requests = []
+
+            async def forward_verification(route):
+                # Buffer the real response before immediate navigation discards its CDP body.
+                response = await route.fetch()
+                result = await response.json()
+                assertion_result.update(
+                    {
+                        "json_object": isinstance(result, dict),
+                        "verified": isinstance(result, dict)
+                        and result.get("verified") is True,
+                    }
+                )
+                await route.fulfill(response=response)
+
+            await rp.route("**/authentication/verification", forward_verification)
             rp.on(
                 "request",
                 lambda request: (
@@ -406,22 +421,9 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("assertion_confirmation")
             await prompt.locator("#masterPassword").fill(password)
             async with rp.expect_response("**/authentication/verification") as verified:
-                confirmation = asyncio.create_task(
-                    prompt.locator("[bit-dialog] button[type=submit]").click()
-                )
+                await prompt.locator("[bit-dialog] button[type=submit]").click()
             progress("assertion_verification")
-            try:
-                response = await verified.value
-                result = await response.json()
-            finally:
-                await confirmation
-            assertion_result.update(
-                {
-                    "json_object": isinstance(result, dict),
-                    "verified": isinstance(result, dict)
-                    and result.get("verified") is True,
-                }
-            )
+            assert (await verified.value).status == 200
             assert assertion_result["verified"]
             progress("assertion_verified")
             await rp.wait_for_url("https://webauthn.io/profile")
