@@ -221,6 +221,8 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                     .get_by_role("button")
                     .click()
                 )
+                await prompt.locator("#masterPassword").fill(password)
+                await prompt.locator("[bit-dialog] button[type=submit]").click()
             assert (await (await verified.value).json())["verified"] is True
             await rp.locator("#optAuthUserVerification").select_option("required")
             progress("native_reprompt_cancel")
