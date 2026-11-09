@@ -4,9 +4,10 @@
 
 Deploy an independent test service on the existing Oracle host at
 `https://agent-test.bo0lean.com`. Keep its process, data and credentials separate
-from production Vaultwarden. Reuse the existing HTTPS/Tunnel ingress if its live
-configuration permits a separate loopback service. Do not expose a new public
-Oracle port or mount production vault/TLS private state into the test service.
+from production Vaultwarden. Use a dedicated locally managed Cloudflare Tunnel,
+provisioned through the existing authenticated CLI, with separate ingress/egress
+networks. Do not modify the production Tunnel or expose a new Oracle port. The
+test service must not mount production vault/TLS private state or Tunnel credentials.
 
 Use generated or operator-created test credentials only. Keep the existing
 GitHub item and 1Password original intact. A passkey registered for GitHub cannot

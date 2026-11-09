@@ -98,7 +98,10 @@ jobs:
             --pattern dist-chrome-2026.10.0.zip --skip-existing \
             --dir "$RUNNER_TEMP/native-extension"
       - name: Build the isolated test service with locked dependencies
-        run: docker build --quiet -t vaultwarden-agent-test:ci ./examples/agent-test-site
+        run: |
+          docker build --quiet -t vaultwarden-agent-test:ci ./examples/agent-test-site
+          AGENT_TEST_IMAGE=vaultwarden-agent-test:ci AGENT_TEST_TUNNEL_ID=00000000-0000-4000-8000-000000000000 \
+            docker compose -f examples/agent-test-site/compose.yml config --quiet
       - name: Verify native passkeys with disposable credentials
         run: |
           xvfb-run -a -s "-screen 0 1440x1000x24 -nolisten tcp" \

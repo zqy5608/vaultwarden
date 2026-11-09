@@ -10,7 +10,6 @@ services:
     mem_limit: 256m
     cpus: 0.5
     pids_limit: 64
-    ports: ["127.0.0.1:18082:18082"]
     volumes: ["/var/lib/vaultwarden-agent-test:/data"]
     tmpfs: ["/tmp:rw,nosuid,nodev,noexec,size=16m"]
     networks:
@@ -19,7 +18,29 @@ services:
     logging:
       driver: local
       options: {max-size: 5m, max-file: "2"}
+  tunnel:
+    image: cloudflare/cloudflared@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+    command: [tunnel, --no-autoupdate, --config, /etc/cloudflared/config.yml, run, "${AGENT_TEST_TUNNEL_ID:?Set the dedicated tunnel UUID}"]
+    user: "65532:65532"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    depends_on:
+      test-site: {condition: service_healthy}
+    volumes:
+      - /etc/vaultwarden-agent-test/cloudflared.yml:/etc/cloudflared/config.yml:ro
+      - /etc/vaultwarden-agent-test/tunnel.json:/run/secrets/tunnel.json:ro
+    networks: [ingress, egress]
+    logging:
+      driver: local
+      options: {max-size: 5m, max-file: "2"}
 networks:
   ingress:
     name: vaultwarden-agent-test-ingress
     internal: true
+  egress:
+    name: vaultwarden-agent-test-egress

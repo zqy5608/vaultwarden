@@ -25,22 +25,28 @@ Build the checked-out immutable release and prepare its independent data directo
 ```sh
 docker build -t vaultwarden-agent-test:COMMIT examples/agent-test-site
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/vaultwarden-agent-test
-AGENT_TEST_IMAGE=vaultwarden-agent-test:COMMIT docker compose \
+AGENT_TEST_IMAGE=vaultwarden-agent-test:COMMIT AGENT_TEST_TUNNEL_ID=UUID docker compose \
   -f examples/agent-test-site/compose.yml up -d
 ```
 
 Persist the selected image in the root-owned deployment configuration. The
 container has a read-only root, no capabilities, a dedicated internal network,
-bounded resources and a loopback-only maintenance port. Its SQLite file contains
+bounded resources and no host-published port. Its SQLite file contains
 test password hashes, public keys and private short-lived sessions; keep backups
 private and use only generated accounts. Registration is limited to 64 accounts.
 
-Attach the existing Cloudflare Tunnel container to
-`vaultwarden-agent-test-ingress` and persist that external network in its Compose
-configuration. Add only the `agent-test.bo0lean.com` hostname with service
-`http://agent-test:18082`. Keep the existing production hostname and routes intact.
-Configure DNS in the existing Tunnel dashboard; no new public Oracle port is
-needed. Check the live configuration before choosing the exact change mechanism.
+Use the authenticated Mac `cloudflared` CLI to create the dedicated
+`vaultwarden-agent-test` tunnel, saving its generated credentials in the private
+operations directory. Transfer that file through verified SSH to
+`/etc/vaultwarden-agent-test/tunnel.json`, owned by 65532:65532 and mode 0400.
+Install `cloudflared.yml` beside it as root-owned 0644. Do not copy the Mac's
+account-level origin certificate to Oracle or print credential contents.
+
+The pinned connector joins only this project's private ingress and egress
+networks. The app has no internet egress; the connector has only its dedicated
+tunnel credential. Production containers and networks remain unchanged. After
+the service is healthy, run `cloudflared tunnel route dns UUID agent-test.bo0lean.com`
+without the overwrite flag. This publishes only the owned test hostname.
 
 Verify public `/health`, the expected HTTPS origin, password login/logout and
 actual server-verified passkey login. Recheck production Vaultwarden health.
