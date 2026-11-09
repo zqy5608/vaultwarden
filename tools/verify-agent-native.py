@@ -214,7 +214,10 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("native_registration")
             rp = await context.new_page()
             rp.set_default_timeout(20000)
-            await rp.goto("https://webauthn.io", wait_until="domcontentloaded")
+            await rp.goto(
+                "https://webauthn.io/?authUserVerification=required",
+                wait_until="domcontentloaded",
+            )
             await rp.locator("#input-email").fill(username)
             progress("registration_request")
             async with context.expect_page() as opened:
@@ -234,7 +237,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 progress("registration_verification")
                 await prompt.locator("[bit-dialog] button[type=submit]").click()
             assert (await (await verified.value).json())["verified"] is True
-            await rp.locator("#optAuthUserVerification").select_option("required")
+            progress("native_registration_verified")
             progress("native_reprompt_cancel")
             authentication_requests = []
             rp.on(
