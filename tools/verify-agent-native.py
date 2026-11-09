@@ -159,6 +159,7 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
     broker = BrowserBroker(config)
     socket = runtime / "broker.sock"
     server = None
+    operator = None
     records = []
     parameters = StdioServerParameters(
         command=sys.executable,
@@ -190,12 +191,17 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
         await operator.wait_for_url(re.compile(r"#/(login|lock|tabs/vault)$"))
         if not operator.url.endswith("#/tabs/vault"):
             progress("native_mcp_private_unlock")
+            await operator.locator(
+                "#email:visible, #masterPassword:visible, input[name=masterPassword]:visible"
+            ).first.wait_for()
             if await operator.locator("#email").is_visible():
                 await operator.locator("#email").fill(email)
                 await operator.get_by_role(
                     "button", name="Continue", exact=True
                 ).click()
-            await operator.locator("#masterPassword").fill(password)
+            await operator.locator("#masterPassword, input[name=masterPassword]").fill(
+                password
+            )
             await operator.get_by_role(
                 "button", name=re.compile(r"^(Unlock|Log in)$")
             ).click()
@@ -256,6 +262,19 @@ async def native_mcp_flow(runtime, extension, home, email, password, username) -
             "independent_mcp_session": "passed",
             "mcp_secret_scan": "passed",
         }
+    except Exception:
+        if operator is not None:
+            native_ui.update(
+                {
+                    "route": urlsplit(operator.url).fragment.split("?")[0],
+                    "inputs": await operator.locator("input").evaluate_all(
+                        "xs => xs.map(x => ({id: x.id, type: x.type}))"
+                    ),
+                    "buttons": await operator.get_by_role("button").all_text_contents(),
+                }
+            )
+            assert not any(value in json.dumps(native_ui) for value in private_values)
+        raise
     finally:
         if server is not None:
             server.close()
@@ -440,7 +459,12 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 "tls_validation": "enabled",
             }
         except Exception:
-            if stage in {"native_unlock", "native_master_password", "native_sync"}:
+            if stage in {
+                "native_environment",
+                "native_unlock",
+                "native_master_password",
+                "native_sync",
+            }:
                 native_ui.update(
                     {
                         "route": urlsplit(page.url).fragment.split("?")[0],
