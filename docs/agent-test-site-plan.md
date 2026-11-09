@@ -55,6 +55,12 @@ data sizes. Do not log request bodies or raw verification exceptions.
 
 ## Browser correction
 
+Private enrollment must work in an operator-opened tab at the approved origin,
+without injecting that tab into the broker's MCP session registry. Keep the same
+origin and resource restrictions, and require a separate MCP login with native
+confirmation afterward. Cover operator navigation, same-origin enrollment POSTs,
+denied destinations and absence of a synthetic MCP-authenticated state.
+
 The observed native confirmation window is narrower than Playwright's fixed
 1280x720 emulated viewport, clipping controls. Use the native window's viewport
 for the native provider only. Verify real native popup bounds and full crypto

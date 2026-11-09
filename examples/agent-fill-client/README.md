@@ -351,6 +351,9 @@ configuration. Prepare any local TLS trust only in that browser user's NSS
 database; never disable certificate verification or change the system trust store.
 
 The operator privately enrolls the correct self-hosted account in the native UI.
+Operator-opened pages at the approved site's exact origin also support private
+account/passkey enrollment. They do not create an authenticated MCP session;
+unapproved destinations and cross-origin credential submissions remain blocked.
 `vault_login` then returns `needs_approval` while the operator selects the passkey
 and completes native confirmation. `vault_status` checks the post-login path,
 visible success element and expected account selector. It also requires the

@@ -455,7 +455,6 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("native_registration")
             rp = await context.new_page()
             rp.set_default_timeout(20000)
-            broker.sessions["agent-test"] = (context, rp)
             await rp.goto(RP_HTTPS + "/login", wait_until="domcontentloaded")
             await rp.locator("#input-email").fill(username)
             await rp.locator("#password").fill(site_password)
@@ -569,9 +568,9 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 "native_popup_viewport": "passed",
                 "assertion_replay_rejected": "passed",
                 "password_mcp_login": password_result["real_https_login"],
+                "operator_site_enrollment": "passed",
             }
             await rp.close()
-            broker.sessions.pop("agent-test")
             await context.clear_cookies()
             mcp_result = await native_mcp_flow(
                 runtime, broker, page, password, username
