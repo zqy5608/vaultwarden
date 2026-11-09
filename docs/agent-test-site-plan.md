@@ -39,6 +39,11 @@ state-changing requests and in WebAuthn verification. Challenges are bound to a
 session, expire and are consumed once atomically. Bound request and stored-test
 data sizes. Do not log request bodies or raw verification exceptions.
 
+Allow five minutes consistently for broker approval, browser WebAuthn confirmation
+and the server challenge. The former two-minute window expired during real VNC
+confirmation. Keep single-use consumption, exact origin/RP binding, required
+user verification and rejection at the expiry boundary.
+
 ## HTTP contract
 
 | Route | Behavior |

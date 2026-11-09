@@ -154,7 +154,7 @@ async def options(request: Request) -> Response:
             rp_name="Agent Auth Test",
             user_id=session["user_id"],
             user_name=session["username"],
-            timeout=120000,
+            timeout=CHALLENGE_SECONDS * 1000,
             authenticator_selection=AuthenticatorSelectionCriteria(
                 resident_key=ResidentKeyRequirement.REQUIRED,
                 user_verification=UserVerificationRequirement.REQUIRED,
@@ -166,7 +166,7 @@ async def options(request: Request) -> Response:
     else:
         value = generate_authentication_options(
             rp_id=request.app.state.rp_id,
-            timeout=120000,
+            timeout=CHALLENGE_SECONDS * 1000,
             user_verification=UserVerificationRequirement.REQUIRED,
         )
     response = JSONResponse(json.loads(options_to_json(value)))

@@ -178,6 +178,20 @@ class NativeBrowserTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertFalse(self.broker.sessions)
 
+    async def test_private_confirmation_has_five_minutes_and_still_expires(self):
+        clock = SimpleNamespace(monotonic=lambda: 1000)
+        with patch("browser_broker.time", clock):
+            await self.broker.login("example")
+            clock.monotonic = lambda: 1180
+            self.assertEqual(
+                (await self.broker.status("example"))["status"], "needs_approval"
+            )
+            clock.monotonic = lambda: 1300
+            self.assertEqual(
+                (await self.broker.status("example"))["reason"], "approval_expired"
+            )
+        self.assertFalse(self.broker.sessions)
+
     async def test_reflected_native_errors_never_cross_boundary(self):
         await self.broker.login("example")
         sentinel = secrets.token_urlsafe(40)
