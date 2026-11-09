@@ -109,6 +109,13 @@ service, data, backup and SMTP configuration are independent of this client.
 
 ## Native passkey deployment
 
+Current acceptance uses the independent Oracle RP at
+`https://agent-test.bo0lean.com`; see the [owned-site plan](agent-test-site-plan.md)
+and [service deployment](../examples/agent-test-site/README.md). Retarget only the
+operator-approved site metadata with a private rollback copy. Create a separate
+test credential for this RP; preserve the previous GitHub credential. The notes
+below describe the original GitHub enrollment and the shared runtime setup.
+
 The native provider uses a dedicated vault account containing only the approved
 GitHub item. The user approved creating that account and copying the single
 1Password item through native credential exchange, retaining the original.
