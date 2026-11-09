@@ -10,6 +10,7 @@ import json
 import os
 import re
 import stat
+import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -332,6 +333,9 @@ class BrowserBroker:
             or profile.stat().st_mode & 0o077
         ):
             raise BrokerError("private_native_runtime_required")
+        # Reopening an extension cache can retain account state after failed approval.
+        # shortcut: closed profiles remain volatile; restart the service to reclaim space.
+        profile = Path(tempfile.mkdtemp(prefix="browser-", dir=profile))
         self.native_context = await self.playwright.chromium.launch_persistent_context(
             str(profile),
             channel="chromium",
@@ -361,9 +365,10 @@ class BrowserBroker:
             "page",
             lambda page: asyncio.create_task(self._watch_native_verification(page)),
         )
-        for page in self.native_context.pages:
-            await self._quiet_close(page)
         operator = await self.native_context.new_page()
+        for page in self.native_context.pages:
+            if page is not operator:
+                await self._quiet_close(page)
         await operator.goto(self.native_extension_origin + "/popup/index.html#/login")
 
     async def _watch_native_verification(self, page) -> None:

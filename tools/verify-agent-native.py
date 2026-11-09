@@ -13,7 +13,6 @@ import hashlib
 import http.cookiejar
 import json
 import os
-import re
 import runpy
 import secrets
 import signal
@@ -22,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -347,11 +347,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 f"chrome-extension://{extension_id}/popup/index.html#/intro-carousel"
             )
             await page.get_by_role("button", name="Log in", exact=True).click()
-            await page.wait_for_url(
-                re.compile(r"#/(default-password-manager-prompt|login)$")
-            )
-            if "default-password-manager-prompt" in page.url:
-                await page.get_by_role("button", name="Skip", exact=True).click()
+            await page.get_by_role("button", name="Skip", exact=True).click()
             await page.locator("environment-selector").get_by_role("button").click()
             await page.get_by_role("menuitem", name="self-hosted").click()
             await page.locator("#self_hosted_env_settings_form_input_base_url").fill(
@@ -468,9 +464,28 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             await rp.close()
             broker.sessions.pop("webauthn")
             await context.clear_cookies()
+            mcp_result = await native_mcp_flow(
+                runtime, broker, page, password, username
+            )
+            progress("native_restart_requires_operator")
+            await broker.close()
+            await broker._start()
+            progress("native_restart_browser_ready")
+            fresh = broker.native_context.pages[0]
+            await fresh.goto(
+                broker.native_extension_origin + "/popup/index.html#/intro-carousel"
+            )
+            progress("native_restart_onboarding")
+            await fresh.get_by_role("button", name="Log in", exact=True).click()
+            await fresh.get_by_role("button", name="Skip", exact=True).click()
+            progress("native_restart_login")
+            await fresh.locator("#email").wait_for(state="visible")
+            assert await fresh.locator("#email").input_value() == ""
+            assert not await broker.native_context.cookies("https://webauthn.io")
             return {
                 **result,
-                **await native_mcp_flow(runtime, broker, page, password, username),
+                **mcp_result,
+                "native_restart_requires_operator": "passed",
             }
         except Exception:
             if stage in {
@@ -504,6 +519,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--extension-archive", type=Path)
     args = parser.parse_args()
     runtime = Path(
         tempfile.mkdtemp(prefix="vaultwarden-native-verification-")
@@ -518,8 +534,9 @@ def main() -> int:
         signal.signal(signum, interrupted)
     try:
         progress("pinned_extension")
-        archive = runtime / "extension.zip"
-        urllib.request.urlretrieve(EXTENSION_URL, archive)
+        archive = args.extension_archive or runtime / "extension.zip"
+        if args.extension_archive is None:
+            urllib.request.urlretrieve(EXTENSION_URL, archive)
         assert hashlib.sha256(archive.read_bytes()).hexdigest() == EXTENSION_SHA256
         extension = runtime / "extension"
         extension.mkdir()
@@ -654,10 +671,19 @@ def main() -> int:
         report = {"status": "passed", **result}
     except Exception as error:
         report = {"status": "failed", "stage": stage, "api_statuses": network_statuses}
+        if isinstance(error, urllib.error.HTTPError):
+            report["http_status"] = error.code
         errors = [error]
         for item in errors:
             if isinstance(item, BaseExceptionGroup):
                 errors.extend(item.exceptions)
+        report["failure_locations"] = [
+            {"source": Path(frame.filename).name, "line": frame.lineno}
+            for item in errors
+            for frame in traceback.extract_tb(item.__traceback__)
+            if Path(frame.filename).name
+            in {"verify-agent-native.py", "browser_broker.py"}
+        ]
         report["leaf_failure_types"] = sorted(
             {
                 type(item).__name__
@@ -677,6 +703,9 @@ def main() -> int:
                 "TimeoutError",
                 "Error",
                 "JSONDecodeError",
+                "HTTPError",
+                "URLError",
+                "CalledProcessError",
             }
             else "other"
         )

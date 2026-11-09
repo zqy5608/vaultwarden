@@ -344,7 +344,9 @@ folder tokens; review the account's accessible vault contents before enrollment.
 Run the shared broker under a separate unprivileged account, with a root-owned
 pinned Bitwarden extension, full sandboxed Chromium, a private display and an
 operator-only confirmation channel. The profile parent must be account-owned
-0700. Use a volatile runtime directory for the profile, browser home, cache and
+0700. `profile_path` is a private container; each browser start creates a fresh
+profile below it, requiring private operator enrollment again after closure.
+Use a volatile runtime directory for the profile, browser home, cache and
 configuration. Prepare any local TLS trust only in that browser user's NSS
 database; never disable certificate verification or change the system trust store.
 
