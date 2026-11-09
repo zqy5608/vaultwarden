@@ -178,10 +178,10 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             )
             await page.locator("[bit-dialog] button[type=submit]").click()
             progress("native_unlock")
-            await page.get_by_label("Email address", exact=True).fill(email)
+            await page.locator("#email").fill(email)
             await page.get_by_role("button", name="Continue", exact=True).click()
             progress("native_master_password")
-            await page.get_by_label("Master password", exact=True).fill(password)
+            await page.locator("#masterPassword").fill(password)
             await page.get_by_role("button", name="Log in", exact=True).click()
             progress("native_sync")
             await page.wait_for_url("**/#/tabs/vault")
@@ -225,7 +225,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                     .get_by_role("button")
                     .click()
                 )
-                await window.get_by_label("Master password", exact=True).wait_for()
+                await window.locator("#masterPassword").wait_for()
                 return window
 
             prompt = await choose_passkey()
@@ -236,7 +236,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 await prompt.close()
             progress("native_assertion")
             prompt = await choose_passkey()
-            await prompt.get_by_label("Master password", exact=True).fill(password)
+            await prompt.locator("#masterPassword").fill(password)
             async with rp.expect_response("**/authentication/verification") as verified:
                 await prompt.locator("[bit-dialog] button[type=submit]").click()
             assert (await (await verified.value).json())["verified"] is True
