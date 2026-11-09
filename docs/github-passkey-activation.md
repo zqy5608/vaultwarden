@@ -5,10 +5,10 @@
 - Site: `https://github.com`; account: `zqy5608`; item name: `Github`.
 - The user confirmed that the passkey is stored in **1Password**. Its presence
   in Vaultwarden has not been established. No password/passkey was read.
-- Codex previously called the restricted Oracle MCP endpoint directly. After a
-  transport interruption, a fresh independent MCP session still returns
-  `not_configured`; current-chat reconnection remains pending. The deployed
-  0.1.2 browser handles password forms only.
+- PR #12 merged and its native client 0.1.3 was deployed on Oracle. Fresh
+  restricted SSH/MCP sessions return the approved GitHub site and
+  `not_authenticated`. Retiring the old password-only processes closed the
+  current chat's transport; reload that connection before personal acceptance.
 - 1Password's supported-agent interface explicitly excludes passkeys. Its normal
   browser extension supports passkeys, including native operator verification.
   Do not treat API tokens or an existing browser session as passkey acceptance.
@@ -18,6 +18,9 @@
 The user approved copying only `Github / zqy5608` into Vaultwarden, retaining
 the 1Password original. The copy has not been performed. Native-provider
 calibration must pass before asking the operator to confirm the transfer.
+The user selected a dedicated account email and an iPhone running iOS 26 or
+later. Keep the email in private operations notes; registration and transfer
+remain private operator actions.
 
 Current calibration: the pinned official extension 2026.10.0 opened successfully
 under UID 995 on Oracle with full Chromium and native sandboxing. CI passes
@@ -63,11 +66,10 @@ Before any transfer:
    cannot transfer that passkey, stop; do not fall back to a plaintext export or
    create a replacement credential without separate approval.
 
-The native Bitwarden provider is now implemented and calibrated in the isolated
-browser. It is not part of the currently installed password-only 0.1.2 release.
-Install the tested client and verify the private operator channel before real
-enrollment. Keep keys with the native provider; do not load a production private
-key into a testing virtual authenticator.
+The native Bitwarden provider is implemented, calibrated and deployed in the
+isolated browser. Verify the private operator channel before real enrollment.
+Keep keys with the native provider; do not load a production private key into
+a testing virtual authenticator.
 
 Acceptance still requires a fresh GitHub passkey login through the current
 Codex MCP, the correct authenticated account, retained status, denied-site and
@@ -131,11 +133,11 @@ real synthetic WebAuthn registration/assertion, pending/cancel/timeout states,
 account mismatch and unapproved origins. Then deploy and verify the private UI,
 complete the approved native copy, and accept a fresh GitHub login from this chat.
 
-The shared broker and native control plane are implemented for version 0.1.3;
-all 63 client checks and final PR CI pass, including the full native verifier.
-PR #12 has not yet been merged or deployed at this source checkpoint. Production
-still runs client 0.1.2. Private account registration, the approved one-item copy
-and real current-chat GitHub acceptance remain unfinished.
+PR #12's shared broker and native control plane passed all 63 client checks and
+final native CI before merge and deployment. Version 0.1.4 adds fresh-profile
+recovery after browser closure. Its rollout requires the complete native restart
+check as well as those existing gates. Private account registration, the approved
+one-item copy and real current-chat GitHub acceptance remain unfinished.
 
 ## Alternative not selected
 
