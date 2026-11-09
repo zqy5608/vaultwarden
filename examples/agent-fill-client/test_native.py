@@ -144,6 +144,19 @@ class NativeBrowserTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["reason"], "approval_expired")
         self.assertFalse(self.broker.sessions)
 
+    async def test_passkey_button_can_render_after_dom_ready(self):
+        await self.context.route(
+            "https://login.example.test/login",
+            lambda route: route.fulfill(
+                content_type="text/html",
+                body='<main hidden><button id="passkey">Sign in</button></main>'
+                '<script>setTimeout(() => document.querySelector("main").hidden = false, 300)</script>',
+            ),
+        )
+        self.assertEqual(
+            (await self.broker.login("example"))["status"], "needs_approval"
+        )
+
     async def test_account_marker_without_provider_verification_is_rejected(self):
         await self.broker.login("example")
         await self.broker.sessions["example"][1].goto(
