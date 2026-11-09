@@ -54,6 +54,45 @@ jobs:
           EOF
             sudo apparmor_parser -r /etc/apparmor.d/vaultwarden-agent-ci
           fi
+      - name: Check private API loopback connectivity and isolation
+        run: |
+          test ! -e /var/lib/vaultwarden-agent-automation
+          sudo install -d -m 0700 /etc/vaultwarden-agent /var/lib/vaultwarden-agent-automation /var/lib/vaultwarden-agent-automation-tls /run/vaultwarden-agent-automation
+          sudo install -m 0644 tools/agent-automation-Caddyfile /etc/vaultwarden-agent/automation-Caddyfile
+          sudo python3 - <<'PY'
+          import os, secrets
+          from pathlib import Path
+          os.umask(0o077)
+          Path('/run/vaultwarden-agent-automation/admin-token').write_text(secrets.token_urlsafe(48))
+          PY
+          trap 'docker compose -f tools/agent-automation-compose.yml stop --timeout 10 >/dev/null' EXIT
+          docker compose -f tools/agent-automation-compose.yml up -d --wait --wait-timeout 60
+          python3 - <<'PY'
+          import json, ssl, subprocess, time, urllib.request
+          deadline = time.monotonic() + 30
+          while True:
+              try:
+                  certificate = subprocess.run([
+                      'docker', 'exec', 'vaultwarden-agent-automation-api-tls-1',
+                      'cat', '/data/caddy/pki/authorities/local/root.crt'
+                  ], capture_output=True).stdout
+                  context = ssl.create_default_context(cadata=certificate.decode())
+                  with urllib.request.urlopen('https://localhost:18444/alive', context=context, timeout=5) as response:
+                      assert response.status == 200
+                  break
+              except (OSError, ValueError):
+                  if time.monotonic() >= deadline:
+                      raise
+                  time.sleep(0.5)
+          vault = json.loads(subprocess.check_output(['docker', 'inspect', 'vaultwarden-agent-automation-vault-1']))[0]
+          assert not vault['HostConfig']['PortBindings']
+          assert set(vault['NetworkSettings']['Networks']) == {'vaultwarden-agent-automation'}
+          proxy = json.loads(subprocess.check_output(['docker', 'inspect', 'vaultwarden-agent-automation-api-tls-1']))[0]
+          assert proxy['NetworkSettings']['Ports']['18444/tcp'] == [{'HostIp': '127.0.0.1', 'HostPort': '18444'}]
+          network = json.loads(subprocess.check_output(['docker', 'network', 'inspect', 'vaultwarden-agent-automation']))[0]
+          assert network['Internal']
+          print(json.dumps({'private_tls_health': 'passed', 'runtime_isolation': 'passed'}))
+          PY
       - name: Check reference clients and MCP credential boundaries
         run: |
           sh -n tools/agent-mcp-ssh.sh tools/agent-native-display.sh tools/agent-native-broker.sh
