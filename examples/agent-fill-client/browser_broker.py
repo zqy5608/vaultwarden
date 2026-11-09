@@ -460,6 +460,7 @@ class BrowserBroker:
             # The native provider waits for document focus before opening confirmation.
             await page.bring_to_front()
             button = page.locator(site["passkey_selector"])
+            await button.wait_for(state="visible")
             if (
                 origin(page.url) != origin(site["login_url"])
                 or await button.count() != 1

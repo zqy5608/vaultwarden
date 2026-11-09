@@ -3,8 +3,10 @@
 ## Confirmed target and current state
 
 - Site: `https://github.com`; account: `zqy5608`; item name: `Github`.
-- The user confirmed that the passkey is stored in **1Password**. Its presence
-  in Vaultwarden has not been established. No password/passkey was read.
+- The user confirmed that the original passkey is stored in **1Password** and
+  reports completing the approved one-item copy to the dedicated Vaultwarden
+  account. Direct GitHub login acceptance is still required. No password or
+  passkey was read into the model context.
 - PR #12 merged and its native client 0.1.3 was deployed on Oracle. Fresh
   restricted SSH/MCP sessions return the approved GitHub site and
   `not_authenticated`. Retiring the old password-only processes closed the
@@ -16,11 +18,11 @@
 ## Approved narrow activation path
 
 The user approved copying only `Github / zqy5608` into Vaultwarden, retaining
-the 1Password original. The copy has not been performed. Native-provider
-calibration must pass before asking the operator to confirm the transfer.
+the 1Password original. Native-provider calibration passed before enrollment;
+the operator now reports completing that copy. Do not repeat the import.
 The user selected a dedicated account email and an iPhone running iOS 26 or
 later. Keep the email in private operations notes; registration and transfer
-remain private operator actions.
+were private operator actions.
 
 Current calibration: the pinned official extension 2026.10.0 opened successfully
 under UID 995 on Oracle with full Chromium and native sandboxing. CI passes
@@ -113,6 +115,10 @@ observes only field presence, never its value. A success marker without that
 native confirmation fails closed. Additional native sites require separate
 private runtimes until per-request confirmation binding is extended.
 
+The configured passkey button may appear after DOMContentLoaded. Wait within
+the existing browser timeout, then recheck its unique match and exact origin
+before requesting native approval. Never force a hidden button or skip these checks.
+
 Live inspection found four simultaneous SSH/MCP processes under the broker
 account. A native persistent profile cannot be independently opened by each
 process. Run one trusted broker behind a private Unix socket and keep the stdio
@@ -136,8 +142,11 @@ complete the approved native copy, and accept a fresh GitHub login from this cha
 PR #12's shared broker and native control plane passed all 63 client checks and
 final native CI before merge and deployment. Version 0.1.4 adds fresh-profile
 recovery after browser closure. Its rollout requires the complete native restart
-check as well as those existing gates. Private account registration, the approved
-one-item copy and real current-chat GitHub acceptance remain unfinished.
+check as well as those existing gates. The operator reports completing private
+registration, the approved one-item copy and provider enrollment. The first real
+current-chat GitHub attempt exposed a delayed button-rendering race; version
+0.1.5 waits for readiness before applying the existing safety checks. Personal
+GitHub acceptance remains required after rollout and private provider re-login.
 
 ## Alternative not selected
 
