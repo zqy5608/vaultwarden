@@ -720,6 +720,7 @@ def main() -> int:
         )
         ca = runtime / "ca.crt"
         deadline = time.monotonic() + 30
+        probe = "vault"
         while True:
             try:
                 # Docker's archive copy cannot read tmpfs; export only the public CA.
@@ -734,12 +735,14 @@ def main() -> int:
                         ]
                     )
                 )
+                probe = "vault"
                 with urllib.request.urlopen(
                     HTTPS + "/alive",
                     context=ssl.create_default_context(cafile=str(ca)),
                     timeout=5,
                 ) as response:
                     assert response.status == 200
+                probe = "owned_rp"
                 with urllib.request.urlopen(
                     RP_HTTPS + "/health",
                     context=(
@@ -757,6 +760,7 @@ def main() -> int:
                         "type": type(error).__name__,
                         "reason_type": type(getattr(error, "reason", None)).__name__,
                         "http_status": getattr(error, "code", None),
+                        "service": probe,
                     }
                 )
                 assert time.monotonic() < deadline
@@ -842,6 +846,27 @@ def main() -> int:
             report["synthetic_ui_controls"] = native_ui
         if stage == "disposable_vault_tls":
             report["tls_error"] = tls_error
+            report["rp_process_status"] = (
+                relying_party.poll() if relying_party else None
+            )
+            log = (
+                (runtime / "rp.log").read_text()
+                if (runtime / "rp.log").exists()
+                else ""
+            )
+            report["rp_startup_errors"] = [
+                value
+                for value in (
+                    "No module named agent_test_site",
+                    "ModuleNotFoundError",
+                    "ImportError",
+                    "TypeError",
+                    "PermissionError",
+                    "Address already in use",
+                    "unrecognized arguments",
+                )
+                if value in log
+            ]
     finally:
         if relying_party is not None:
             relying_party.terminate()
