@@ -7,12 +7,18 @@ on:
       - "examples/agent-fill-client/**"
       - "tools/verify-agent-mcp.py"
       - "tools/verify-agent-native.py"
+      - "tools/agent-*.sh"
+      - "tools/agent-native-*"
+      - "tools/vaultwarden-agent-*.service"
       - ".github/workflows/agent-client.yml"
   pull_request:
     paths:
       - "examples/agent-fill-client/**"
       - "tools/verify-agent-mcp.py"
       - "tools/verify-agent-native.py"
+      - "tools/agent-*.sh"
+      - "tools/agent-native-*"
+      - "tools/vaultwarden-agent-*.service"
       - ".github/workflows/agent-client.yml"
 
 concurrency:
@@ -46,6 +52,7 @@ jobs:
           fi
       - name: Check reference clients and MCP credential boundaries
         run: |
+          sh -n tools/agent-mcp-ssh.sh tools/agent-native-display.sh tools/agent-native-broker.sh
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_client.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_publish.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_mcp.py

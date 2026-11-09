@@ -1,0 +1,22 @@
+[Unit]
+Description=Private Vaultwarden confirmation display
+
+[Service]
+Type=exec
+User=vaultwarden-agent
+Group=ubuntu
+RuntimeDirectory=vaultwarden-agent-ui
+RuntimeDirectoryMode=0710
+UMask=0077
+ExecStart=/opt/vaultwarden-agent/bin/native-display
+ExecStartPost=/usr/bin/timeout 10 /bin/sh -c 'until [ -S /run/vaultwarden-agent-ui/view.sock ]; do sleep 0.1; done'
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateDevices=true
+PrivateTmp=true
+LimitCORE=0
+MemoryMax=256M
+StandardOutput=null
+StandardError=null

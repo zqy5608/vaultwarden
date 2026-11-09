@@ -1,0 +1,32 @@
+[Unit]
+Description=Trusted Vaultwarden native passkey broker
+BindsTo=vaultwarden-agent-display.service
+After=vaultwarden-agent-display.service network-online.target
+JoinsNamespaceOf=vaultwarden-agent-display.service
+
+[Service]
+Type=exec
+User=vaultwarden-agent
+Group=vaultwarden-agent
+RuntimeDirectory=vaultwarden-agent
+RuntimeDirectoryMode=0700
+UMask=0077
+Environment=HOME=/run/vaultwarden-agent/home
+Environment=XDG_CONFIG_HOME=/run/vaultwarden-agent/config
+Environment=XDG_CACHE_HOME=/run/vaultwarden-agent/cache
+Environment=DISPLAY=:99
+Environment=XAUTHORITY=/run/vaultwarden-agent-ui/Xauthority
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/vaultwarden-agent/browsers
+ExecStart=/opt/vaultwarden-agent/bin/native-broker
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateDevices=true
+PrivateTmp=true
+LimitCORE=0
+MemoryMax=2G
+CPUQuota=100%
+TimeoutStopSec=20
+StandardOutput=null
+StandardError=null
