@@ -271,12 +271,17 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 await prompt.close()
             progress("native_assertion")
             prompt = await choose_passkey()
+            progress("assertion_confirmation")
             await prompt.locator("#masterPassword").fill(password)
             async with rp.expect_response("**/authentication/verification") as verified:
                 await prompt.locator("[bit-dialog] button[type=submit]").click()
+            progress("assertion_verification")
             assert (await (await verified.value).json())["verified"] is True
+            progress("assertion_verified")
             await rp.wait_for_url("https://webauthn.io/profile")
+            progress("assertion_account")
             assert username in await rp.locator("body").inner_text()
+            progress("assertion_retained_session")
             await rp.reload(wait_until="domcontentloaded")
             assert urlsplit(rp.url).path == "/profile"
             return {
