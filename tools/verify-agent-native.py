@@ -40,6 +40,7 @@ stage = "start"
 private_values: list[str] = []
 network_statuses: list[dict] = []
 tls_error: dict = {}
+native_ui: dict = {}
 
 
 def command(args: list[str]) -> bytes:
@@ -179,8 +180,10 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             progress("native_unlock")
             await page.get_by_label("Email address", exact=True).fill(email)
             await page.get_by_role("button", name="Continue", exact=True).click()
+            progress("native_master_password")
             await page.get_by_label("Master password", exact=True).fill(password)
             await page.get_by_role("button", name="Log in", exact=True).click()
+            progress("native_sync")
             await page.wait_for_url("**/#/tabs/vault")
             progress("native_registration")
             rp = await context.new_page()
@@ -248,6 +251,21 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 "retained_session": "passed",
                 "tls_validation": "enabled",
             }
+        except Exception:
+            if stage in {"native_unlock", "native_master_password", "native_sync"}:
+                native_ui.update(
+                    {
+                        "route": urlsplit(page.url).fragment.split("?")[0],
+                        "inputs": await page.locator("input").evaluate_all(
+                            "xs => xs.map(x => ({id: x.id, type: x.type}))"
+                        ),
+                        "buttons": await page.get_by_role("button").all_text_contents(),
+                    }
+                )
+                assert not any(
+                    value in json.dumps(native_ui) for value in private_values
+                )
+            raise
         finally:
             await context.close()
 
@@ -399,6 +417,8 @@ def main() -> int:
         report = {"status": "passed", **result}
     except Exception:
         report = {"status": "failed", "stage": stage, "api_statuses": network_statuses}
+        if native_ui:
+            report["synthetic_ui_controls"] = native_ui
         if stage == "disposable_vault_tls":
             report["tls_error"] = tls_error
     finally:
