@@ -15,6 +15,7 @@ mcp = ["mcp==2.3.0", "playwright==1.64.1"]
 [project.scripts]
 vaultwarden-agent-mcp = "agent_mcp:main"
 vaultwarden-agent-setup = "agent_mcp:setup"
+vaultwarden-agent-broker = "broker_rpc:main"
 
 [tool.setuptools]
-py-modules = ["agent_http", "ai_agent", "fill_agent", "bw_crypto", "bw_kdf", "publish_uri", "browser_broker", "agent_mcp"]
+py-modules = ["agent_http", "ai_agent", "fill_agent", "bw_crypto", "bw_kdf", "publish_uri", "browser_broker", "agent_mcp", "broker_rpc"]

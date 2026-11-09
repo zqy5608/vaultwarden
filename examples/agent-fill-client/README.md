@@ -312,8 +312,22 @@ or invalid private configuration exposes the tool catalog but returns
 | `vault_login` | `site` | Fixed authenticated/failed state and a bounded reason code |
 | `vault_status` | `site` | Verified authentication state without page contents |
 
-Browser sessions stay in memory for the MCP process lifetime; they are not
-exported or saved to disk. Failed submissions are not retried automatically.
+For multiple stdio/SSH clients, run one broker under the trusted account and
+point every client at its private Unix socket:
+
+```bash
+vaultwarden-agent-broker --config /private/config.json --socket /private/runtime/broker.sock
+vaultwarden-agent-mcp --broker-socket /private/runtime/broker.sock
+```
+
+The socket parent must be owned by that account and mode 0700; the socket is
+0600. The socket accepts only the same three fixed actions. Clients do not load
+the vault configuration, and disconnecting a client leaves the shared browser
+alive. Restarting the broker ends its sessions. Keep this socket on the trusted
+host, outside the AI host's filesystem access.
+
+Without a shared broker, sessions stay in memory for the MCP process lifetime;
+they are not exported or saved to disk. Failed submissions are not retried automatically.
 Debug logging is rejected before browser startup. Authentication is reported
 only when both the configured origin/path and post-login selector match.
 
