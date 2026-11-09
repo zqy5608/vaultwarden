@@ -515,6 +515,7 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--extension-archive", type=Path)
     args = parser.parse_args()
     runtime = Path(
         tempfile.mkdtemp(prefix="vaultwarden-native-verification-")
@@ -529,8 +530,9 @@ def main() -> int:
         signal.signal(signum, interrupted)
     try:
         progress("pinned_extension")
-        archive = runtime / "extension.zip"
-        urllib.request.urlretrieve(EXTENSION_URL, archive)
+        archive = args.extension_archive or runtime / "extension.zip"
+        if args.extension_archive is None:
+            urllib.request.urlretrieve(EXTENSION_URL, archive)
         assert hashlib.sha256(archive.read_bytes()).hexdigest() == EXTENSION_SHA256
         extension = runtime / "extension"
         extension.mkdir()
@@ -665,6 +667,8 @@ def main() -> int:
         report = {"status": "passed", **result}
     except Exception as error:
         report = {"status": "failed", "stage": stage, "api_statuses": network_statuses}
+        if isinstance(error, urllib.error.HTTPError):
+            report["http_status"] = error.code
         errors = [error]
         for item in errors:
             if isinstance(item, BaseExceptionGroup):
@@ -688,6 +692,9 @@ def main() -> int:
                 "TimeoutError",
                 "Error",
                 "JSONDecodeError",
+                "HTTPError",
+                "URLError",
+                "CalledProcessError",
             }
             else "other"
         )

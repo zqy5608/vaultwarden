@@ -87,8 +87,16 @@ jobs:
           EOF
             sudo apparmor_parser -r /etc/apparmor.d/vaultwarden-agent-native-ci
           fi
+      - name: Fetch the pinned public extension
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download browser-v2026.10.0 --repo bitwarden/clients \
+            --pattern dist-chrome-2026.10.0.zip --skip-existing \
+            --dir "$RUNNER_TEMP/native-extension"
       - name: Verify native passkeys with disposable credentials
         run: |
           xvfb-run -a -s "-screen 0 1440x1000x24 -nolisten tcp" \
             "$RUNNER_TEMP/agent-native/bin/python" tools/verify-agent-native.py \
+            --extension-archive "$RUNNER_TEMP/native-extension/dist-chrome-2026.10.0.zip" \
             --report "$RUNNER_TEMP/native-passkey-report.json"
