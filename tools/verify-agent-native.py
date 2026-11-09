@@ -160,11 +160,17 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
 
             def observe(response):
                 path = urlsplit(response.url).path
-                if response.url.startswith(HTTPS + "/") and path in {
+                if response.url.startswith(
+                    (HTTPS + "/", "https://webauthn.io/")
+                ) and path in {
                     "/api/config",
                     "/identity/accounts/prelogin",
                     "/identity/connect/token",
                     "/api/sync",
+                    "/registration/options",
+                    "/registration/verification",
+                    "/authentication/options",
+                    "/authentication/verification",
                 }:
                     network_statuses.append(
                         {"endpoint": path, "status": response.status}
@@ -210,10 +216,12 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             rp.set_default_timeout(20000)
             await rp.goto("https://webauthn.io", wait_until="domcontentloaded")
             await rp.locator("#input-email").fill(username)
+            progress("registration_request")
             async with context.expect_page() as opened:
                 await rp.locator("#register-button").click()
             prompt = await opened.value
             await prompt.wait_for_url(f"chrome-extension://{extension_id}/**")
+            progress("registration_native_item")
             async with rp.expect_response("**/registration/verification") as verified:
                 await (
                     prompt.locator("app-fido2-cipher-row")
@@ -221,7 +229,9 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                     .get_by_role("button")
                     .click()
                 )
+                progress("registration_confirmation")
                 await prompt.locator("#masterPassword").fill(password)
+                progress("registration_verification")
                 await prompt.locator("[bit-dialog] button[type=submit]").click()
             assert (await (await verified.value).json())["verified"] is True
             await rp.locator("#optAuthUserVerification").select_option("required")
