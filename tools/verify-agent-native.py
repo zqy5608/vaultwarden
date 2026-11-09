@@ -801,7 +801,23 @@ def main() -> int:
             for item in errors
             for frame in traceback.extract_tb(item.__traceback__)
             if Path(frame.filename).name
-            in {"verify-agent-native.py", "browser_broker.py"}
+            in {"verify-agent-native.py", "verify-agent-mcp.py", "browser_broker.py"}
+        ]
+        report["failure_reasons"] = [
+            str(item)
+            for item in errors
+            if str(item)
+            in {
+                "browser_unavailable",
+                "page_unavailable",
+                "vault_unavailable",
+                "unsafe_form",
+                "ticket_unavailable",
+                "submission_unconfirmed",
+                "authentication_unconfirmed",
+                "retained_session_not_confirmed",
+                "secret_output_detected",
+            }
         ]
         report["leaf_failure_types"] = sorted(
             {

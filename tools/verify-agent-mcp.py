@@ -149,7 +149,12 @@ async def call_mcp(config_path, diagnostics, secret_values):
             "PYTHONDONTWRITEBYTECODE": "1",
             **{
                 name: os.environ[name]
-                for name in ("DISPLAY", "PLAYWRIGHT_BROWSERS_PATH", "XDG_CONFIG_HOME")
+                for name in (
+                    "DISPLAY",
+                    "XAUTHORITY",
+                    "PLAYWRIGHT_BROWSERS_PATH",
+                    "XDG_CONFIG_HOME",
+                )
                 if name in os.environ
             },
         },
@@ -190,6 +195,14 @@ async def call_mcp(config_path, diagnostics, secret_values):
             results[
                 tool + ("-denied" if arguments.get("site") == "not-approved" else "")
             ] = view(result)
+        if results["vault_login"]["status"] != "authenticated":
+            raise RuntimeError(
+                results["vault_login"].get("reason", "external_login_not_confirmed")
+            )
+        assert results["vault_status"]["status"] == "authenticated", (
+            "retained_session_not_confirmed"
+        )
+        assert results["vault_login-denied"]["status"] == "site_not_allowed"
         concurrent = await asyncio.gather(
             client.call_tool("vault_login", {"site": "agent-test"}),
             client.call_tool("vault_login", {"site": "agent-test"}),
@@ -206,14 +219,6 @@ async def call_mcp(config_path, diagnostics, secret_values):
     assert all(value not in wire + captured for value in secret_values), (
         "secret_output_detected"
     )
-    if results["vault_login"]["status"] != "authenticated":
-        raise RuntimeError(
-            results["vault_login"].get("reason", "external_login_not_confirmed")
-        )
-    assert results["vault_status"]["status"] == "authenticated", (
-        "retained_session_not_confirmed"
-    )
-    assert results["vault_login-denied"]["status"] == "site_not_allowed"
     return {
         "mcp_transport": "stdio",
         "tool_count": len(catalog.tools),
