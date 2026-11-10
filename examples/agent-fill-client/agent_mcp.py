@@ -45,7 +45,17 @@ def create_server(config_path: Path, broker_socket: Path | None = None):
                 await broker.close()
 
     server = MCPServer(
-        "Vaultwarden trusted login", lifespan=lifespan, log_level="WARNING"
+        "Vaultwarden trusted login",
+        instructions=(
+            "Use approved site names only. Call vault_login; needs_approval opens a "
+            "private operator confirmation. Never request a password, code, key or VNC "
+            "setup in chat. Poll vault_status for completion; do not retry a failed or "
+            "cancelled login without the operator. After authentication use vault_actions "
+            "and vault_action with nonsecret inputs in the same session. Use vault_logout "
+            "when finished. No arbitrary URLs, scripts, page contents or session exports."
+        ),
+        lifespan=lifespan,
+        log_level="WARNING",
     )
 
     @server.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False))

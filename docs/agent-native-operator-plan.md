@@ -44,6 +44,22 @@ website session continues without another confirmation.
   approved static resource origins, including redirect hops. Provider metadata
   contains no vault credentials.
 
+## Implementation status
+
+Client 0.1.10 implements the private operator socket, separate forced SSH bridge,
+Mac stdio connection helper and masked native dialog. The password broker can
+compose one native provider under a distinct site name. Provider setup is
+automatic after fresh operator input; no human master password is persisted.
+The existing display unit now runs Xvfb with a private X authorization cookie,
+without any VNC listener or viewer. Native connections have an exact-origin proxy
+allowlist in addition to routing checks.
+
+Unit checks cover leases, cancellation, stale requests, expiry, mixed-provider
+routing and the private dialog pipe. The real-provider CI verifier also exercises
+fresh setup, cancellation, wrong input, replay and an authenticated workspace
+operation. Their implementation does not imply those release gates have passed.
+Keep deployment and the overall goal pending until observed results are recorded.
+
 ## Release gates
 
 Exercise the actual official extension with generated credentials and real

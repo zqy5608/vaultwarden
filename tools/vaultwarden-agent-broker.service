@@ -1,7 +1,8 @@
 [Unit]
-Description=Trusted Vaultwarden native passkey broker
+Description=Trusted Vaultwarden password and native passkey broker
 BindsTo=vaultwarden-agent-display.service
-After=vaultwarden-agent-display.service network-online.target
+Wants=vaultwarden-agent-automation.service
+After=vaultwarden-agent-display.service vaultwarden-agent-automation.service network-online.target
 JoinsNamespaceOf=vaultwarden-agent-display.service
 
 [Service]
@@ -11,12 +12,17 @@ Group=vaultwarden-agent
 RuntimeDirectory=vaultwarden-agent
 RuntimeDirectoryMode=0700
 UMask=0077
+LoadCredentialEncrypted=broker-config:/etc/vaultwarden-agent/broker-config.cred
+LoadCredential=automation-ca:/etc/vaultwarden-agent/automation-ca.crt
+LoadCredential=native-ca:/etc/vaultwarden-agent/native-ca.crt
 Environment=HOME=/run/vaultwarden-agent/home
 Environment=XDG_CONFIG_HOME=/run/vaultwarden-agent/config
 Environment=XDG_CACHE_HOME=/run/vaultwarden-agent/cache
 Environment=DISPLAY=:99
 Environment=XAUTHORITY=/run/vaultwarden-agent-ui/Xauthority
 Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/vaultwarden-agent/browsers
+Environment=SSL_CERT_FILE=%d/automation-ca
+ExecStartPre=/usr/bin/install -m 0600 %d/broker-config /run/vaultwarden-agent/broker-config
 ExecStart=/opt/vaultwarden-agent/bin/native-broker
 NoNewPrivileges=true
 CapabilityBoundingSet=
@@ -30,3 +36,6 @@ CPUQuota=100%
 TimeoutStopSec=20
 StandardOutput=null
 StandardError=null
+
+[Install]
+WantedBy=multi-user.target

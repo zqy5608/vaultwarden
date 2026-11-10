@@ -365,7 +365,10 @@ class McpTransportTests(unittest.IsolatedAsyncioTestCase):
                 stdio_client(parameters, errlog=diagnostics) as (read, write),
                 ClientSession(read, write) as client,
             ):
-                await client.initialize()
+                initialized = await client.initialize()
+                self.assertIn("private operator confirmation", initialized.instructions)
+                self.assertIn("nonsecret inputs", initialized.instructions)
+                self.assertLessEqual(len(initialized.instructions), 512)
                 catalog = await client.list_tools()
                 self.assertEqual(
                     {tool.name for tool in catalog.tools},

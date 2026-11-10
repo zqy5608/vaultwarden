@@ -230,8 +230,43 @@ public debugging interface is permitted.
 Do not activate or claim this path until the actual provider, cancel/expiry/replay
 cases, privacy scan and current-chat owned-site login pass. Install only formal
 native dependencies and retain the browser sandbox, normal TLS validation,
-loopback-only vault proxy and existing production data. Deployment commands and
-rollback instructions will be added with the tested implementation.
+loopback-only vault proxy and existing production data. Client 0.1.10 supplies the replacement source; keep activation gated on CI and
+current-chat acceptance.
+
+Install `xvfb`, `xauth`, `libnss3-tools`, the pinned full Chromium and root-owned
+Bitwarden extension. Do not install TigerVNC. Use the native display and mixed
+broker units, native launcher and existing loopback-only TLS Compose files.
+The broker receives both public CAs as systemd credentials, imports only the
+native CA into its private NSS database, and reads the encrypted composite config
+through the existing private runtime copy. No system trust store is changed.
+
+Prepare a root-owned 0600 native metadata file from `native.example.json`, using
+the dedicated vault email and existing expected test username. Configure with:
+
+```sh
+/opt/vaultwarden-agent/venv/bin/python /opt/vaultwarden-agent/bin/agent-automation-setup.py configure --native-profile /etc/vaultwarden-agent/native-profile.json
+```
+
+This preserves machine credentials and adds the native profile. Install
+`agent-operator-ssh.sh` root-owned 0755 and authorize a separate key using
+`restrict,command="/opt/vaultwarden-agent/bin/operator-ssh"`. Keep the existing
+MCP key and its forced command intact. Verify that neither key can start a shell,
+forward ports or transfer files and that the model key cannot reach the operator
+protocol.
+
+On the trusted Mac, install `agent-mcp-connect.py` and a Python 3.11+ runtime in
+the formal operations directory. Keep `mcp_identity`, `operator_identity` and
+`known_hosts` there; private keys remain 0600 and the directory 0700. Register the
+helper with `--directory` and `--host vaultwarden-agent@ORACLE_HOST`. Do not put
+vault credentials in Codex arguments or environment. The helper relays MCP
+unchanged and offers the native dialog only after an explicit login returns
+`needs_approval`. The broker leases each request to one private connection.
+
+Before switching, retain the encrypted config, wheel, units and immutable site
+image in a root-only rollback. Verify units and both independent MCP/password
+and native flows before reconnecting Codex. Roll back the wheel/config/unit to
+the previous password-only service if the native path fails. Keep original
+accounts/passkeys and the production vault untouched.
 
 ## References
 

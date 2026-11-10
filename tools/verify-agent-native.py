@@ -593,10 +593,13 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
             await fresh.locator("#email").wait_for(state="visible")
             assert await fresh.locator("#email").input_value() == ""
             assert not await broker.native_context.cookies(RP_HTTPS)
+            await broker.close()
+            operator_result = await operator_flow(runtime, config, email, password)
             return {
                 **result,
                 **mcp_result,
                 "native_restart_requires_operator": "passed",
+                **operator_result,
             }
         except Exception:
             if stage in {
@@ -625,6 +628,81 @@ async def native_flow(runtime: Path, extension: Path, home: Path) -> dict:
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
+
+
+async def operator_flow(runtime: Path, config: dict, email: str, password: str) -> dict:
+    """Exercise fresh setup and the actual private ceremony without any remote desktop."""
+    from browser_broker import BrowserBroker
+    from native_operator import approve, start_operator
+
+    config = {
+        **config,
+        "operator": {"vault_origin": HTTPS, "email": email},
+    }
+    config["sites"]["agent-test"]["actions"] = FIXTURE["workspace_actions"](RP_HTTPS)
+    broker = BrowserBroker(config)
+    server = await start_operator(runtime / "operator.sock", broker)
+
+    async def exchange(confirmation):
+        assert (await broker.login("agent-test"))["status"] == "needs_approval"
+        reader, writer = await asyncio.open_unix_connection(runtime / "operator.sock")
+        try:
+            writer.write(b'{"method":"pending"}\n')
+            await writer.drain()
+            pending = json.loads(await reader.readline())
+            assert pending["origin"] == RP_HTTPS
+            writer.write(
+                json.dumps(
+                    {"request": pending["request"], "password": confirmation}
+                ).encode()
+                + b"\n"
+            )
+            await writer.drain()
+            response = await reader.readline()
+            assert not any(value.encode() in response for value in private_values)
+            value = json.loads(response)
+            native_ui["operator_result"] = value
+            return pending["request"], value
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    try:
+        progress("private_operator_cancel")
+        _, cancelled = await exchange(None)
+        assert cancelled == {"status": "cancelled"}
+        assert (await broker.status("agent-test"))["status"] == "not_authenticated"
+        progress("private_operator_wrong_confirmation")
+        wrong = secrets.token_urlsafe(48)
+        private_values.append(wrong)
+        _, rejected = await exchange(wrong)
+        assert rejected["status"] == "failed"
+        assert (await broker.status("agent-test"))["status"] == "not_authenticated"
+        progress("private_operator_fresh_login")
+        nonce, accepted = await exchange(password)
+        assert accepted == {"status": "authenticated"}
+        assert await approve(broker, nonce, password) == {"status": "rejected"}
+        progress("private_operator_authenticated_task")
+        for action, values in [
+            ("save-note", {"note": "Private native workflow"}),
+            ("check-note", {"expected": "Private native workflow"}),
+            ("save-note", {"note": ""}),
+            ("check-note", {"expected": ""}),
+        ]:
+            assert (await broker.action("agent-test", action, values))[
+                "status"
+            ] == "completed"
+        assert (await broker.logout("agent-test"))["server_logout"] == "completed"
+        assert (await broker.status("agent-test"))["status"] == "not_authenticated"
+        return {
+            "private_operator_fresh_login": "passed",
+            "native_authenticated_task": "passed",
+            "private_operator_cancel_wrong_and_replay": "passed",
+        }
+    finally:
+        server.close()
+        await server.wait_closed()
+        await broker.close()
 
 
 def main() -> int:

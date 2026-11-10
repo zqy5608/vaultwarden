@@ -262,7 +262,7 @@ def change_credentials(action):
         )
 
 
-def main(action):
+def main(action, native_profile=None):
     global stage
     stage = action
     os.umask(0o077)
@@ -270,6 +270,8 @@ def main(action):
     try:
         if os.geteuid() != 0:
             raise PermissionError("administrator_required")
+        if native_profile is not None and action != "configure":
+            raise ValueError("configure_required")
         if action == "init":
             initialize()
         elif action == "configure":
@@ -287,6 +289,10 @@ def main(action):
             config["sites"]["agent-test"]["actions"] = HELPERS["workspace_actions"](
                 SITE
             )
+            if native_profile is not None:
+                from browser_broker import read_config
+
+                config["native"] = read_config(native_profile)
             validate_config(config)
             seal("broker-config", json.dumps(config).encode(), SEALED)
         else:
@@ -298,7 +304,7 @@ def main(action):
                 {
                     "status": "ready" if action != "revoke" else "revoked",
                     "site": "agent-test",
-                    "mode": "headless_password",
+                    "mode": "isolated_browser",
                 }
             )
         )
@@ -319,4 +325,6 @@ def main(action):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["init", "revoke", "rotate", "configure"])
-    raise SystemExit(main(parser.parse_args().action))
+    parser.add_argument("--native-profile", type=Path)
+    arguments = parser.parse_args()
+    raise SystemExit(main(arguments.action, arguments.native_profile))

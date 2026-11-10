@@ -103,7 +103,9 @@ async def start_broker(path: Path, broker: BrowserBroker) -> asyncio.Server:
     return server
 
 
-async def serve(config_path: Path, socket_path: Path) -> None:
+async def serve(
+    config_path: Path, socket_path: Path, operator_path: Path | None = None
+) -> None:
     broker = BrowserBroker(read_config(config_path))
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -113,8 +115,18 @@ async def serve(config_path: Path, socket_path: Path) -> None:
         if broker.native:
             await broker._start()
         server = await start_broker(socket_path, broker)
-        async with server:
-            await stopped.wait()
+        operator = None
+        if operator_path is not None:
+            from native_operator import start_operator
+
+            operator = await start_operator(operator_path, broker)
+        try:
+            async with server:
+                await stopped.wait()
+        finally:
+            if operator is not None:
+                operator.close()
+                await operator.wait_closed()
     finally:
         await broker.close()
 
@@ -123,5 +135,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--socket", type=Path, required=True)
+    parser.add_argument("--operator-socket", type=Path)
     args = parser.parse_args()
-    asyncio.run(serve(args.config, args.socket))
+    asyncio.run(serve(args.config, args.socket, args.operator_socket))

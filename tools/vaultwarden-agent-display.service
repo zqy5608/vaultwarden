@@ -4,12 +4,12 @@ Description=Private Vaultwarden confirmation display
 [Service]
 Type=exec
 User=vaultwarden-agent
-Group=ubuntu
+Group=vaultwarden-agent
 RuntimeDirectory=vaultwarden-agent-ui
-RuntimeDirectoryMode=0710
+RuntimeDirectoryMode=0700
 UMask=0077
 ExecStart=/opt/vaultwarden-agent/bin/native-display
-ExecStartPost=/usr/bin/timeout 10 /bin/sh -c 'until [ -S /run/vaultwarden-agent-ui/view.sock ]; do sleep 0.1; done'
+ExecStartPost=/usr/bin/timeout 10 /bin/sh -c 'until [ -S /tmp/.X11-unix/X99 ]; do sleep 0.1; done'
 NoNewPrivileges=true
 CapabilityBoundingSet=
 ProtectSystem=strict
