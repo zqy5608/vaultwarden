@@ -146,9 +146,15 @@ A Python client for this flow is in [`examples/agent-fill-client`](../examples/a
 
 The optional [`vaultwarden-agent` MCP package](../examples/agent-fill-client/README.md#codex-mcp-and-private-browser-login)
 uses these same endpoints and decryption helpers. Its trusted server owns a
-private browser and exposes only operator-approved site listing, login and
-authentication status. It never returns the fill CLI's JSON, login fields,
+private browser and exposes operator-approved site listing, login, authentication
+status, named nonsecret form operations and logout. It never returns the fill CLI's JSON, login fields,
 page contents, cookies or screenshots to the AI. Site profiles bind credentials
 to an exact HTTPS origin and POST form, and authentication requires a separate
 post-login path and element check. See the [implementation specification](agent-mcp-spec.md)
 for acceptance checks and the OS/host isolation boundary.
+
+Operation names, exact same-origin destinations and form/success selectors are
+operator configuration. The model supplies only declared nonsecret field values;
+it cannot choose a URL/selector or read browser data. Password/OTP forms and
+unapproved destinations fail closed. This adds no server Agent API endpoint or
+credential access role; it reuses the authenticated private browser session.

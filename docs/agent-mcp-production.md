@@ -5,6 +5,33 @@ Use the existing server API and deploy the client under a separate unprivileged
 account. The AI host receives only an SSH key restricted to the MCP protocol.
 Administrators and the trusted process remain outside this isolation guarantee.
 
+## Workflow upgrade acceptance
+
+The overall project remains active. Owned-site password login is an accepted
+milestone; the complete release also requires useful post-login operations and
+a usable native confirmation path without VNC. See the
+[operator plan](agent-native-operator-plan.md) before native activation.
+
+The 0.1.9 client adds `vault_actions`, `vault_action` and `vault_logout` alongside
+the original three tools. Site operations are operator metadata; no URL,
+selector, DOM or credential is supplied by the model. `sign-out` performs the
+configured server logout, then the broker discards its private context even if
+server logout cannot be confirmed.
+
+Deploy the owned RP 0.1.2 workspace/schema addition with its normal SQLite backup
+and immutable image rollback. Preserve existing users and passkeys. Upgrade the
+client wheel and run the private setup script's `configure` action to add the
+three owned-site operations to the encrypted config without replacing keys,
+scoped credentials, item IDs or accounts. Reconnect the current MCP connection
+only after independent SSH/MCP validation exposes exactly the six intended tools.
+
+Actual acceptance is login, list operations, save a nonsecret note, verify it
+through the authenticated server check, preserve state across an independent
+connection, clear the note, invalidate server/browser sessions, reject a later
+operation and log in again. Repeat the restart and revocation/rotation gates.
+Require real request/redirect boundary tests and secret-output checks. Do not
+claim this milestone finishes the native operator gate or the whole project.
+
 ## Default unattended owned-site deployment
 
 The owned test site uses the existing password broker in headless mode. A new,
