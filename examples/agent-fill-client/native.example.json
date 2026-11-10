@@ -3,13 +3,44 @@
   "extension_path": "/opt/vaultwarden-agent/extensions/bitwarden-2026.10.0",
   "profile_path": "/run/vaultwarden-agent/profile",
   "sites": {
-    "github": {
-      "login_url": "https://github.com/login",
-      "passkey_selector": "button[data-action='click:webauthn-subtle#prompt']",
-      "success_path": "/",
-      "success_selector": "button[aria-label='Open user navigation menu']:visible",
-      "account_selector": "meta[name='user-login'][content='github-username']",
-      "resource_origins": ["https://github.githubassets.com"]
+    "agent-passkey": {
+      "login_url": "https://agent-test.bo0lean.com/login",
+      "passkey_selector": "#login-button",
+      "success_path": "/profile",
+      "success_selector": "#profile",
+      "account_selector": "meta[name='agent-test-user'][content='agent-test']",
+      "resource_origins": [],
+      "actions": {
+        "save-note": {
+          "url": "https://agent-test.bo0lean.com/workspace",
+          "fields": {
+            "note": "#note"
+          },
+          "submit_selector": "#save-note",
+          "success_path": "/workspace",
+          "success_selector": "#workspace"
+        },
+        "check-note": {
+          "url": "https://agent-test.bo0lean.com/workspace",
+          "fields": {
+            "expected": "#expected-note"
+          },
+          "submit_selector": "#check-note",
+          "success_path": "/workspace/check",
+          "success_selector": "#note-matches"
+        },
+        "sign-out": {
+          "url": "https://agent-test.bo0lean.com/profile",
+          "fields": {},
+          "submit_selector": "#logout",
+          "success_path": "/login",
+          "success_selector": "#password"
+        }
+      }
     }
+  },
+  "operator": {
+    "vault_origin": "https://localhost:18443",
+    "email": "dedicated-vault@example.test"
   }
 }

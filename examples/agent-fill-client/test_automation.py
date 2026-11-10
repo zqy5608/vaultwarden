@@ -122,6 +122,32 @@ class AutomationTests(unittest.TestCase):
             {"save-note", "check-note", "sign-out"},
         )
 
+    def test_native_metadata_is_added_without_replacing_machine_credentials(self):
+        from test_mcp import config
+        from test_operator import operator_config
+
+        data = config()
+        data["sites"]["agent-test"] = data["sites"].pop("example")
+        data["sites"]["agent-test"]["login_url"] = automation.SITE + "/login"
+        native = operator_config()
+        with tempfile.TemporaryDirectory() as directory:
+            profile = Path(directory) / "native.json"
+            profile.write_text(json.dumps(native))
+            profile.chmod(0o600)
+            with (
+                patch.object(automation.os, "geteuid", return_value=0),
+                patch.object(
+                    automation, "run", side_effect=[json.dumps(data).encode(), b""]
+                ),
+                patch.object(automation, "seal") as seal,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(automation.main("configure", profile), 0)
+        replacement = json.loads(seal.call_args.args[1])
+        self.assertEqual(replacement["native"], native)
+        for key in ["user_key", "agent_token", "fill_token", "fill_agent_id"]:
+            self.assertEqual(replacement[key], data[key])
+
     def test_private_exception_is_not_reflected(self):
         output = io.StringIO()
         with (
