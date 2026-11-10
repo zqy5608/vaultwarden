@@ -168,6 +168,61 @@ class OperatorProtocolTests(unittest.IsolatedAsyncioTestCase):
                 )
         await parent.close()
 
+    async def test_cancelled_ceremony_closes_the_unlocked_provider(self):
+        from types import SimpleNamespace
+
+        provider = SimpleNamespace(url="chrome-extension://fixture/popup/index.html")
+        context = SimpleNamespace(pages=[provider], close=AsyncMock())
+        self.broker.native_context = context
+        self.broker.native_extension_origin = "chrome-extension://fixture"
+        self.broker.sessions["example"] = (context, object())
+        with (
+            patch(
+                "native_operator.provider_login",
+                AsyncMock(side_effect=asyncio.CancelledError),
+            ),
+            self.assertRaises(asyncio.CancelledError),
+        ):
+            await approve(
+                self.broker, self.broker.native_request, "fixture-confirmation"
+            )
+        context.close.assert_awaited_once()
+        self.assertFalse(self.broker.pending)
+        self.assertFalse(self.broker.sessions)
+
+    async def test_private_disconnect_cancels_an_in_progress_ceremony(self):
+        from types import SimpleNamespace
+
+        entered, closed = asyncio.Event(), asyncio.Event()
+        provider = SimpleNamespace(url="chrome-extension://fixture/popup/index.html")
+        context = SimpleNamespace(
+            pages=[provider], close=AsyncMock(side_effect=closed.set)
+        )
+        self.broker.native_context = context
+        self.broker.native_extension_origin = "chrome-extension://fixture"
+        self.broker.sessions["example"] = (context, object())
+
+        async def waiting(*args):
+            entered.set()
+            await asyncio.Future()
+
+        with patch("native_operator.provider_login", waiting):
+            _reader, writer, pending = await self.lease()
+            writer.write(
+                json.dumps(
+                    {"request": pending["request"], "password": "fixture"}
+                ).encode()
+                + b"\n"
+            )
+            await writer.drain()
+            async with asyncio.timeout(2):
+                await entered.wait()
+                writer.close()
+                await writer.wait_closed()
+                await closed.wait()
+        self.assertFalse(self.broker.pending)
+        self.assertFalse(self.broker.sessions)
+
 
 class ConnectTests(unittest.TestCase):
     @classmethod

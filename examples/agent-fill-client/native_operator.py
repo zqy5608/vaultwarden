@@ -114,6 +114,9 @@ async def approve(broker, request: str, password: str | None) -> dict:
                 result = await broker._native_status(name, site)
                 if result["status"] == "authenticated":
                     return {"status": "authenticated"}
+        except asyncio.CancelledError:
+            await broker.close()
+            raise
         except Exception:
             pass
         finally:
@@ -171,7 +174,17 @@ async def start_operator(path: Path, broker) -> asyncio.Server:
                 ):
                     return
                 password = answer.pop("password")
-                result = await approve(backend, request, password)
+                async with asyncio.TaskGroup() as tasks:
+                    ceremony = tasks.create_task(approve(backend, request, password))
+                    disconnected = tasks.create_task(reader.read(1))
+                    done, _ = await asyncio.wait(
+                        [ceremony, disconnected], return_when=asyncio.FIRST_COMPLETED
+                    )
+                    if disconnected in done:
+                        ceremony.cancel()
+                        return
+                    disconnected.cancel()
+                    result = ceremony.result()
                 password = None
                 writer.write(json.dumps(result).encode() + b"\n")
                 await writer.drain()
