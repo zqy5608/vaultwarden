@@ -29,6 +29,86 @@ class SiteTests(unittest.TestCase):
         self.client.close()
         self.runtime.cleanup()
 
+    def test_workspace_requires_login_and_persists_only_this_accounts_note(self):
+        self.assertEqual(self.client.get("/workspace").status_code, 303)
+        self.assertEqual(
+            self.client.post(
+                "/workspace", data={"note": "no"}, headers=self.headers
+            ).status_code,
+            401,
+        )
+        self.register()
+        note = "Nonsecret <test> note"
+        response = self.client.post(
+            "/workspace", data={"note": note}, headers=self.headers
+        )
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("Nonsecret &lt;test&gt; note", self.client.get("/workspace").text)
+        with TestClient(self.app, base_url=ORIGIN, follow_redirects=False) as other:
+            response = other.post(
+                "/register",
+                data={
+                    "username": "other_" + secrets.token_hex(6),
+                    "password": self.password,
+                },
+                headers=self.headers,
+            )
+            self.assertEqual(response.status_code, 303)
+            self.assertNotIn(
+                "Nonsecret &lt;test&gt; note", other.get("/workspace").text
+            )
+            self.assertEqual(
+                other.post(
+                    "/workspace/check", data={"expected": note}, headers=self.headers
+                ).status_code,
+                409,
+            )
+        with database(self.path) as db:
+            self.assertEqual(
+                db.execute("SELECT value FROM workspace_notes").fetchone()[0], note
+            )
+        response = self.client.post(
+            "/workspace/check", data={"expected": note}, headers=self.headers
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="note-matches"', response.text)
+        response = self.client.post(
+            "/workspace/check", data={"expected": "other note"}, headers=self.headers
+        )
+        self.assertEqual(response.status_code, 409)
+        response = self.client.post(
+            "/workspace", data={"note": ""}, headers=self.headers
+        )
+        self.assertEqual(response.status_code, 303)
+        with database(self.path) as db:
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM workspace_notes").fetchone()[0], 0
+            )
+        response = self.client.post(
+            "/workspace/check", data={"expected": ""}, headers=self.headers
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_workspace_rejects_untrusted_origin_and_invalid_data_without_reflection(
+        self,
+    ):
+        self.register()
+        sentinel = secrets.token_urlsafe(32)
+        response = self.client.post(
+            "/workspace",
+            json={"note": sentinel},
+            headers={"Origin": "https://other.example.test"},
+        )
+        self.assertEqual(response.status_code, 403)
+        for data in [
+            {"note": sentinel * 100},
+            {"note": {"private": sentinel}},
+            {"note": sentinel, "extra": sentinel},
+        ]:
+            response = self.client.post("/workspace", json=data, headers=self.headers)
+            self.assertEqual(response.status_code, 400)
+            self.assertNotIn(sentinel, response.text)
+
     def register(self):
         response = self.client.post(
             "/register",
