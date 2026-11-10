@@ -13,6 +13,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from broker_rpc import call_broker
 from browser_broker import (
     BrokerError,
     BrowserBroker,
@@ -20,7 +21,6 @@ from browser_broker import (
     read_config,
     validate_config,
 )
-from broker_rpc import call_broker
 
 DEFAULT_CONFIG = Path.home() / ".config/vaultwarden-agent/config.json"
 
@@ -79,6 +79,47 @@ def create_server(config_path: Path, broker_socket: Path | None = None):
         if broker_socket is not None:
             return await call_broker(broker_socket, "status", site)
         return await broker.status(site)
+
+    @server.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False))
+    async def vault_actions(site: str) -> dict:
+        """List operator-approved action and input names; never return page contents or selectors."""
+        if broker_socket is not None:
+            return await call_broker(broker_socket, "actions", site)
+        return broker.actions(site)
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=True,
+            idempotentHint=False,
+            openWorldHint=True,
+        )
+    )
+    async def vault_action(site: str, action: str, values: dict[str, str]) -> dict:
+        """Run a configured same-origin form action in the authenticated private session.
+
+        Supply only the listed nonsecret input fields. This tool accepts no URLs,
+        selectors or scripts, and returns no page contents or input values.
+        """
+        if broker_socket is not None:
+            return await call_broker(
+                broker_socket, "action", site, action=action, values=values
+            )
+        return await broker.action(site, action, values)
+
+    @server.tool(
+        annotations=ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=False,
+            idempotentHint=True,
+            openWorldHint=True,
+        )
+    )
+    async def vault_logout(site: str) -> dict:
+        """Run the approved sign-out when configured, then discard the private browser session."""
+        if broker_socket is not None:
+            return await call_broker(broker_socket, "logout", site)
+        return await broker.logout(site)
 
     return server
 

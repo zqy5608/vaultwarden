@@ -50,6 +50,8 @@ def origin(url: str, *, local: bool = False) -> str:
         raise BrokerError("https_required")
     port = parsed.port
     host = parsed.hostname.lower()
+    if host.startswith(".") or any(c in host for c in "*;,<>%"):
+        raise BrokerError("invalid_origin")
     if ":" in host:
         host = f"[{host}]"
     suffix = (
@@ -115,7 +117,7 @@ def validate_config(config: dict) -> None:
     for name, site in config["sites"].items():
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", name):
             raise BrokerError("invalid_site")
-        if set(site) != {
+        if set(site) - {"actions"} != {
             "item_id",
             "login_url",
             "username_selector",
@@ -134,9 +136,63 @@ def validate_config(config: dict) -> None:
             raise BrokerError("invalid_site")
         if any(
             not isinstance(value, str) or not value or len(value) > 2048
-            for value in site.values()
+            for key, value in site.items()
+            if key != "actions"
         ):
             raise BrokerError("invalid_site")
+        _validate_actions(site)
+
+
+def _validate_actions(site: dict) -> None:
+    actions = site.get("actions", {})
+    if not isinstance(actions, dict) or len(actions) > 32:
+        raise BrokerError("invalid_actions")
+    for name, action in actions.items():
+        if (
+            not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", name)
+            or not isinstance(action, dict)
+            or set(action)
+            != {
+                "url",
+                "fields",
+                "submit_selector",
+                "success_path",
+                "success_selector",
+            }
+        ):
+            raise BrokerError("invalid_action")
+        if any(
+            not isinstance(v, str) or not v or len(v) > 2048
+            for k, v in action.items()
+            if k != "fields"
+        ):
+            raise BrokerError("invalid_action")
+        target = urlsplit(action["url"])
+        if (
+            origin(action["url"]) != origin(site["login_url"])
+            or target.query
+            or target.fragment
+        ):
+            raise BrokerError("invalid_action_origin")
+        if not action["success_path"].startswith("/") or any(
+            c in action["success_path"] for c in "?#"
+        ):
+            raise BrokerError("invalid_action")
+        fields = action["fields"]
+        if name == "sign-out" and fields:
+            raise BrokerError("invalid_action_fields")
+        if (
+            not isinstance(fields, dict)
+            or len(fields) > 8
+            or any(
+                not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", key)
+                or not isinstance(selector, str)
+                or not selector
+                or len(selector) > 2048
+                for key, selector in fields.items()
+            )
+        ):
+            raise BrokerError("invalid_action_fields")
 
 
 def _validate_native(config: dict) -> None:
@@ -154,7 +210,9 @@ def _validate_native(config: dict) -> None:
     if not isinstance(config["sites"], dict) or len(config["sites"]) != 1:
         raise BrokerError("invalid_config")
     for name, site in config["sites"].items():
-        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", name) or set(site) != {
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", name) or set(site) - {
+            "actions"
+        } != {
             "login_url",
             "passkey_selector",
             "success_selector",
@@ -166,7 +224,7 @@ def _validate_native(config: dict) -> None:
         if any(
             not isinstance(v, str) or not v or len(v) > 2048
             for k, v in site.items()
-            if k != "resource_origins"
+            if k not in {"resource_origins", "actions"}
         ):
             raise BrokerError("invalid_site")
         login = urlsplit(site["login_url"])
@@ -182,6 +240,7 @@ def _validate_native(config: dict) -> None:
             v != origin(v) for v in site["resource_origins"]
         ):
             raise BrokerError("invalid_site")
+        _validate_actions(site)
 
 
 # One browser operation checks the target again before exposing credentials to it.
@@ -213,6 +272,38 @@ _FORM = """({site, expected, credentials}) => {
   }
   if (!valid()) { set.call(pass, ''); return false; }
   pass.form.requestSubmit(submit);
+  return true;
+}"""
+
+_ACTION_FORM = """({action, expected, values}) => {
+  const submit = document.querySelector(action.submit_selector);
+  const fields = Object.entries(action.fields).map(([name, selector]) =>
+    [name, document.querySelector(selector), selector]);
+  const visible = element => element && element.isConnected && !element.disabled &&
+    element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0 &&
+    getComputedStyle(element).visibility !== 'hidden' && Number(getComputedStyle(element).opacity) > 0;
+  const valid = () => location.origin === expected && visible(submit) &&
+    document.querySelectorAll(action.submit_selector).length === 1 &&
+    (submit instanceof HTMLButtonElement || submit instanceof HTMLInputElement) && submit.type === 'submit' &&
+    submit.form && submit.form.isConnected && submit.form.method.toLowerCase() === 'post' &&
+    !submit.form.querySelector('input[type=password],input[autocomplete="current-password"],input[autocomplete="new-password"],input[autocomplete="one-time-code"],input[autocomplete="username"]') &&
+    ['', '_self'].includes(submit.form.target) && ['', '_self'].includes(submit.formTarget) &&
+    (!submit.hasAttribute('formmethod') || submit.formMethod.toLowerCase() === 'post') &&
+    new URL(submit.hasAttribute('formaction') ? submit.formAction : submit.form.action).origin === expected &&
+    fields.every(([name, field, selector]) => visible(field) && !field.readOnly && field.form === submit.form &&
+      document.querySelectorAll(selector).length === 1 &&
+      (field instanceof HTMLTextAreaElement || (field instanceof HTMLInputElement && ['text','search'].includes(field.type))) &&
+      !['username','one-time-code','current-password','new-password'].includes(field.autocomplete));
+  if (!valid()) return false;
+  if (values === null) return true;
+  for (const [name, field] of fields) {
+    const prototype = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, 'value').set.call(field, values[name]);
+    field.dispatchEvent(new Event('input', {bubbles:true}));
+    field.dispatchEvent(new Event('change', {bubbles:true}));
+  }
+  if (!valid()) return false;
+  submit.form.requestSubmit(submit);
   return true;
 }"""
 
@@ -257,7 +348,7 @@ class BrowserBroker:
                 if self.native:
                     return await self._native_status(name, site)
                 authenticated = bool(
-                    session and await self._authenticated(session[1], site)
+                    session and await self._session_authenticated(name, site)
                 )
             except Exception:
                 authenticated = False
@@ -272,6 +363,132 @@ class BrowserBroker:
             if self.config and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", name)
             else None
         )
+
+    def actions(self, name: str) -> dict:
+        site = self._site(name)
+        if site is None:
+            return {"status": "site_not_allowed" if self.config else "not_configured"}
+        return {
+            "status": "ready",
+            "site": name,
+            "actions": [
+                {"action": key, "fields": sorted(value["fields"])}
+                for key, value in site.get("actions", {}).items()
+            ],
+        }
+
+    async def _session_authenticated(self, name: str, site: dict) -> bool:
+        session = self.sessions.get(name)
+        if not session:
+            return False
+        context, page = session
+        if await self._authenticated(page, site):
+            return True
+        if not site.get("actions") or name in self.pending:
+            return False
+        if page.is_closed() or origin(page.url) != origin(site["login_url"]):
+            return False
+        check = await context.new_page()
+        check.on("popup", lambda popup: asyncio.create_task(self._quiet_close(popup)))
+        try:
+            await check.goto(
+                origin(site["login_url"]) + site["success_path"],
+                wait_until="domcontentloaded",
+            )
+            return await self._authenticated(check, site)
+        finally:
+            await self._quiet_close(check)
+
+    async def _perform_action(
+        self, page, site: dict, action: dict, values: dict
+    ) -> None:
+        await page.goto(action["url"], wait_until="domcontentloaded")
+        args = {"action": action, "expected": origin(site["login_url"]), "values": None}
+        if not await page.evaluate(_ACTION_FORM, args):
+            raise BrokerError("unsafe_form")
+        args["values"] = values
+        async with page.expect_event("domcontentloaded"):
+            if not await page.evaluate(_ACTION_FORM, args):
+                raise BrokerError("unsafe_form")
+        if (
+            origin(page.url) != args["expected"]
+            or urlsplit(page.url).path != action["success_path"]
+        ):
+            raise BrokerError("action_unconfirmed")
+        marker = page.locator(action["success_selector"])
+        await marker.wait_for(state="visible")
+        if await marker.count() != 1:
+            raise BrokerError("action_unconfirmed")
+
+    async def action(self, name: str, operation: str, values: dict) -> dict:
+        async with self.lock:
+            site = self._site(name)
+            if site is None:
+                return {
+                    "status": "site_not_allowed" if self.config else "not_configured"
+                }
+            action = site.get("actions", {}).get(operation)
+            if action is None:
+                return {"status": "action_not_allowed", "site": name}
+            if (
+                not isinstance(values, dict)
+                or set(values) != set(action["fields"])
+                or any(not isinstance(v, str) or len(v) > 2048 for v in values.values())
+                or sum(len(v.encode()) for v in values.values()) > 8192
+            ):
+                return {
+                    "status": "failed",
+                    "reason": "invalid_action_input",
+                    "site": name,
+                }
+            try:
+                if (
+                    self.native
+                    and (name not in self.native_verified or name in self.pending)
+                ) or not await self._session_authenticated(name, site):
+                    return {"status": "not_authenticated", "site": name}
+                await self._perform_action(self.sessions[name][1], site, action, values)
+                return {"status": "completed", "site": name, "action": operation}
+            except BrokerError as error:
+                reason = (
+                    str(error)
+                    if str(error) in {"unsafe_form", "action_unconfirmed"}
+                    else "action_unconfirmed"
+                )
+                return {"status": "failed", "reason": reason, "site": name}
+            except Exception:
+                return {
+                    "status": "failed",
+                    "reason": "action_unconfirmed",
+                    "site": name,
+                }
+
+    async def logout(self, name: str) -> dict:
+        async with self.lock:
+            site = self._site(name)
+            if site is None:
+                return {
+                    "status": "site_not_allowed" if self.config else "not_configured"
+                }
+            server_logout = "not_configured"
+            try:
+                action = site.get("actions", {}).get("sign-out")
+                if action and await self._session_authenticated(name, site):
+                    await self._perform_action(self.sessions[name][1], site, action, {})
+                    server_logout = "completed"
+            except Exception:
+                server_logout = "unconfirmed"
+            finally:
+                session = self.sessions.pop(name, None)
+                if self.native:
+                    await self.close()
+                elif session:
+                    await self._quiet_close(session[0])
+            return {
+                "status": "not_authenticated",
+                "site": name,
+                "server_logout": server_logout,
+            }
 
     async def _quiet_close(self, target) -> None:
         try:
@@ -430,7 +647,7 @@ class BrowserBroker:
             await self.close()
             return {"status": "failed", "reason": "approval_expired", "site": name}
         session = self.sessions.get(name)
-        if session and await self._authenticated(session[1], site):
+        if session and await self._session_authenticated(name, site):
             if name not in self.native_verified:
                 await self.close()
                 return {
@@ -447,8 +664,7 @@ class BrowserBroker:
     async def _native_login(self, name: str, site: dict) -> dict:
         try:
             if name in self.pending or (
-                name in self.sessions
-                and await self._authenticated(self.sessions[name][1], site)
+                name in self.sessions and await self._session_authenticated(name, site)
             ):
                 return await self._native_status(name, site)
             await self._start()
@@ -569,15 +785,22 @@ class BrowserBroker:
             failure = "browser_unavailable"
             try:
                 existing = self.sessions.get(name)
-                if existing and await self._authenticated(existing[1], site):
+                if existing and await self._session_authenticated(name, site):
                     return {"status": "authenticated", "site": name}
                 if existing:
                     await self._quiet_close(existing[0])
                     self.sessions.pop(name, None)
                 await self._start()
                 expected = origin(site["login_url"])
+                # Route callbacks omit redirect hops; Chromium must also deny every other origin.
+                allowed = expected if urlsplit(expected).port else expected + ":443"
                 context = await self.browser.new_context(
-                    accept_downloads=False, service_workers="block"
+                    accept_downloads=False,
+                    service_workers="block",
+                    proxy={
+                        "server": "http://127.0.0.1:0",
+                        "bypass": "<-loopback>," + allowed,
+                    },
                 )
                 context.set_default_timeout(_BROWSER_TIMEOUT_MS)
 

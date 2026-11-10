@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS challenges (
  kind TEXT NOT NULL, challenge BLOB NOT NULL, expires INTEGER NOT NULL,
  PRIMARY KEY(session_id, kind)
 );
+CREATE TABLE IF NOT EXISTS workspace_notes (
+ user_id BLOB PRIMARY KEY REFERENCES users(id),
+ value TEXT NOT NULL CHECK(length(value)<=2048)
+);
 """
 
 

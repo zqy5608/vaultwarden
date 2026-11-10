@@ -33,6 +33,21 @@ class SessionFixture:
             "site": site,
         }
 
+    def actions(self, site):
+        return {
+            "status": "ready",
+            "actions": [{"action": "save-note", "fields": ["note"]}],
+        }
+
+    async def action(self, site, action, values):
+        if not self.authenticated:
+            return {"status": "not_authenticated"}
+        return {"status": "completed", "action": action}
+
+    async def logout(self, site):
+        self.authenticated = False
+        return await self.status(site)
+
 
 class BrokerRpcTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -76,6 +91,20 @@ class BrokerRpcTests(unittest.IsolatedAsyncioTestCase):
         for request in [
             {"method": "evaluate", "script": "fetch('https://other.test')"},
             {"method": "login", "site": "a" * 5000},
+            {
+                "method": "action",
+                "site": "example",
+                "action": "save-note",
+                "values": {"note": "nonsecret"},
+                "selector": "#password",
+            },
+            {
+                "method": "login",
+                "site": "example",
+                "action": "save-note",
+                "values": {"note": "nonsecret"},
+            },
+            {"method": "operator_approve", "site": "example", "password": "fixture"},
         ]:
             reader, writer = await asyncio.open_unix_connection(str(self.path))
             writer.write(json.dumps(request).encode() + b"\n")
@@ -87,6 +116,28 @@ class BrokerRpcTests(unittest.IsolatedAsyncioTestCase):
             writer.close()
             await writer.wait_closed()
         self.assertFalse(self.broker.authenticated)
+
+    async def test_approved_actions_and_logout_cross_the_shared_socket(self):
+        catalog = await call_broker(self.path, "actions", "example")
+        self.assertEqual(catalog["actions"][0]["action"], "save-note")
+        await call_broker(self.path, "login", "example")
+        result = await call_broker(
+            self.path,
+            "action",
+            "example",
+            action="save-note",
+            values={"note": "nonsecret test note"},
+        )
+        self.assertEqual(result, {"status": "completed", "action": "save-note"})
+        await call_broker(self.path, "logout", "example")
+        result = await call_broker(
+            self.path,
+            "action",
+            "example",
+            action="save-note",
+            values={"note": "nonsecret test note"},
+        )
+        self.assertEqual(result["status"], "not_authenticated")
 
     async def test_private_errors_are_not_returned(self):
         sentinel = secrets.token_urlsafe(40)

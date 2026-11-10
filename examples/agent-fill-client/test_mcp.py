@@ -369,13 +369,24 @@ class McpTransportTests(unittest.IsolatedAsyncioTestCase):
                 catalog = await client.list_tools()
                 self.assertEqual(
                     {tool.name for tool in catalog.tools},
-                    {"vault_sites", "vault_login", "vault_status"},
+                    {
+                        "vault_sites",
+                        "vault_login",
+                        "vault_status",
+                        "vault_actions",
+                        "vault_action",
+                        "vault_logout",
+                    },
                 )
                 self.assertFalse((await client.list_resources()).resources)
                 for tool in catalog.tools:
                     self.assertEqual(
                         set(tool.input_schema.get("properties", {})),
-                        set() if tool.name == "vault_sites" else {"site"},
+                        set()
+                        if tool.name == "vault_sites"
+                        else {"site", "action", "values"}
+                        if tool.name == "vault_action"
+                        else {"site"},
                     )
                 result = await client.call_tool("vault_login", {"site": "example"})
                 serialized = result.model_dump_json()

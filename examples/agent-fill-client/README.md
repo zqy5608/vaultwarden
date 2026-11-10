@@ -246,8 +246,10 @@ screenshots, cookies, browser errors or page text. The original reference CLIs
 above retain their existing output contracts and are not used as MCP tools.
 
 The default provider handles username/password forms. The optional native
-provider below supports passkeys with private operator confirmation. Neither
-provider automates cross-origin SSO or arbitrary actions after login. The approved
+provider below uses passkeys with private operator confirmation; its replacement
+operator path is still in progress, see the [operator plan](../../docs/agent-native-operator-plan.md).
+Post-login operations are limited to configured same-origin forms. Cross-origin
+SSO and arbitrary browser code are not exposed. The approved
 website necessarily receives its own password. An unrestricted agent with
 access to the trusted process's files or memory can bypass this boundary;
 deploy the trusted server on a separate OS account/host when that isolation is
@@ -312,6 +314,24 @@ or invalid private configuration exposes the tool catalog but returns
 | `vault_sites` | none | Approved site identifiers and origins |
 | `vault_login` | `site` | Fixed authenticated/needs-approval/failed state and a bounded reason code |
 | `vault_status` | `site` | Verified authentication state without page contents |
+| `vault_actions` | `site` | Configured operation and nonsecret field names |
+| `vault_action` | `site`, `action`, `values` | Fixed completion/failure state without input or page contents |
+| `vault_logout` | `site` | Server sign-out outcome and discarded private session |
+
+Optional `actions` in a site profile bind each named operation to `url`, `fields`
+(input name to selector), `submit_selector`, `success_path` and `success_selector`.
+Use `sites.example.json` as the shape; configure only nonsecret text/textarea
+fields. Password/OTP forms, hidden or duplicate targets, GET submission and
+cross-origin actions are refused. The model receives names, not selectors or
+page content. A site without operations remains compatible and lists no actions.
+Configure `sign-out` with no inputs to invalidate the server session on logout;
+otherwise logout discards the browser and reports `not_configured` for server
+sign-out. A failed server sign-out still closes the private context.
+
+For the owned RP, the acceptance sequence is login, discover operations, save a
+nonsecret note, check its server-persisted value, clear it, logout, reject a new
+operation while logged out, and sign in again. `vault_status` verifies the
+approved account without navigating away from an active task page.
 
 For multiple stdio/SSH clients, run one broker under the trusted account and
 point every client at its private Unix socket:
@@ -322,7 +342,7 @@ vaultwarden-agent-mcp --broker-socket /private/runtime/broker.sock
 ```
 
 The socket parent must be owned by that account and mode 0700; the socket is
-0600. The socket accepts only the same three fixed actions. Clients do not load
+0600. The socket accepts only the same six bounded operations. Clients do not load
 the vault configuration, and disconnecting a client leaves the shared browser
 alive. Restarting the broker ends its sessions. Keep this socket on the trusted
 host, outside the AI host's filesystem access.
@@ -331,6 +351,11 @@ Without a shared broker, sessions stay in memory for the MCP process lifetime;
 they are not exported or saved to disk. Failed submissions are not retried automatically.
 Debug logging is rejected before browser startup. Authentication is reported
 only when both the configured origin/path and post-login selector match.
+
+For password contexts, Chromium also restricts direct connections to the exact
+HTTPS origin/port, including redirect hops. Playwright route callbacks alone
+do not observe every hop; see [routing](https://playwright.dev/python/docs/api/class-page#page-route)
+and [Chromium proxy selection](https://chromium.googlesource.com/chromium/src/+/HEAD/net/docs/proxy.md).
 
 ### Native passkey provider
 

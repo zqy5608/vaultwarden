@@ -8,7 +8,7 @@ CSS = """
 main{width:100%;max-width:480px;background:white;border:1px solid #e2e8f0;border-radius:18px;padding:32px;box-shadow:0 12px 40px #0f172a08}
 .eyebrow{font-size:12px;font-weight:700;letter-spacing:.1em;color:#64748b;margin:0 0 16px}
 h1{font-size:28px;letter-spacing:-.04em;margin:0 0 10px}p{color:#64748b;line-height:1.6;margin:0 0 24px}
-label{display:block;font-size:14px;font-weight:600;margin:18px 0 8px}input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:9px;font:inherit;min-width:0}
+label{display:block;font-size:14px;font-weight:600;margin:18px 0 8px}input,textarea{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:9px;font:inherit;min-width:0}textarea{min-height:140px;resize:vertical}
 button{width:100%;font:inherit;font-weight:600;padding:12px;border-radius:9px;cursor:pointer;border:1px solid #2563eb;background:#2563eb;color:white;margin-top:20px}
 button.secondary{background:white;color:#334155;border-color:#cbd5e1;margin-top:12px}button:disabled{opacity:.6;cursor:wait}
 input:focus,button:focus-visible,a:focus-visible{outline:3px solid #bfdbfe;outline-offset:2px}a{color:#2563eb;text-decoration:none}
@@ -55,7 +55,14 @@ document.querySelector('#login-button')?.addEventListener('click', event => cere
 """
 
 
-def render(kind: str, *, username: str = "", error: str = "") -> str:
+def render(
+    kind: str,
+    *,
+    username: str = "",
+    error: str = "",
+    note: str = "",
+    verified: bool = False,
+) -> str:
     account = escape(username, quote=True)
     register = kind == "register"
     title = "Create a test account" if register else "Welcome back"
@@ -64,8 +71,22 @@ def render(kind: str, *, username: str = "", error: str = "") -> str:
         content = f"""<section id="profile"><span class="badge">Session verified</span>
 <h1>{title}</h1><p>Your authenticated session is active.</p>
 <div class="account"><small>Test account</small><strong>{account}</strong></div>
+<p><a id="workspace-link" href="/workspace">Open test workspace</a></p>
 <button id="register-button" type="button">Register a passkey</button>
 <p id="status" class="status" role="status" aria-live="polite"></p>
+<form method="post" action="/logout"><button id="logout" class="secondary" type="submit">Sign out</button></form></section>"""
+    elif kind == "workspace":
+        title = "Test workspace"
+        content = f"""<section id="workspace"><span class="badge">Authenticated workspace</span>
+<h1>{title}</h1><p>Save a note to test actions in your signed-in session.</p>
+<form method="post" action="/workspace"><label for="note">Test note</label>
+<textarea id="note" name="note" maxlength="2048">{escape(note)}</textarea>
+<button id="save-note" type="submit">Save note</button></form>
+<form method="post" action="/workspace/check"><label for="expected-note">Verify saved note</label>
+<input id="expected-note" name="expected" type="text" maxlength="2048" autocomplete="off">
+<button id="check-note" class="secondary" type="submit">Verify note</button></form>
+{'<p id="note-matches" class="status" role="status">Saved note verified.</p>' if verified else ""}
+<p class="foot"><a href="/profile">Back to profile</a></p>
 <form method="post" action="/logout"><button id="logout" class="secondary" type="submit">Sign out</button></form></section>"""
     else:
         action = "/register" if register else "/login"

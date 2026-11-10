@@ -5,13 +5,40 @@ Use the existing server API and deploy the client under a separate unprivileged
 account. The AI host receives only an SSH key restricted to the MCP protocol.
 Administrators and the trusted process remain outside this isolation guarantee.
 
+## Workflow upgrade acceptance
+
+The overall project remains active. Owned-site password login is an accepted
+milestone; the complete release also requires useful post-login operations and
+a usable native confirmation path without VNC. See the
+[operator plan](agent-native-operator-plan.md) before native activation.
+
+The 0.1.9 client adds `vault_actions`, `vault_action` and `vault_logout` alongside
+the original three tools. Site operations are operator metadata; no URL,
+selector, DOM or credential is supplied by the model. `sign-out` performs the
+configured server logout, then the broker discards its private context even if
+server logout cannot be confirmed.
+
+Deploy the owned RP 0.1.2 workspace/schema addition with its normal SQLite backup
+and immutable image rollback. Preserve existing users and passkeys. Upgrade the
+client wheel and run the private setup script's `configure` action to add the
+three owned-site operations to the encrypted config without replacing keys,
+scoped credentials, item IDs or accounts. Reconnect the current MCP connection
+only after independent SSH/MCP validation exposes exactly the six intended tools.
+
+Actual acceptance is login, list operations, save a nonsecret note, verify it
+through the authenticated server check, preserve state across an independent
+connection, clear the note, invalidate server/browser sessions, reject a later
+operation and log in again. Repeat the restart and revocation/rotation gates.
+Require real request/redirect boundary tests and secret-output checks. Do not
+claim this milestone finishes the native operator gate or the whole project.
+
 ## Default unattended owned-site deployment
 
 The owned test site uses the existing password broker in headless mode. A new,
 generated machine identity is separate from the operator's `agent-test` account
 and its passkey. No human vault password or personal credential is required.
-The native passkey workflow below remains optional; it is not the default and
-must not hold up unattended acceptance.
+This unattended password path is the default. Passkey support has a separate
+acceptance gate; passing the password path does not complete the whole project.
 
 Keep that machine identity in a separate Vaultwarden bound only to loopback,
 with public registration disabled and folder ACLs required. Reuse the verified
@@ -183,80 +210,28 @@ Rollback: restore Codex's previous MCP command, close the remote session and
 disable the dedicated SSH authorization as the operator. Vaultwarden's running
 service, data, backup and SMTP configuration are independent of this client.
 
-## Native passkey deployment
+## Native passkey deployment — pending
 
-Current acceptance uses the independent Oracle RP at
-`https://agent-test.bo0lean.com`; see the [owned-site plan](agent-test-site-plan.md)
-and [service deployment](../examples/agent-test-site/README.md). Retarget only the
-operator-approved site metadata with a private rollback copy. Create a separate
-test credential for this RP; preserve the previous GitHub credential. The notes
-below describe the original GitHub enrollment and the shared runtime setup.
+VNC has been retired on the operator's Mac and the Oracle host. Do not reinstall
+it or follow historical remote-desktop enrollment instructions. The previous
+runtime is retained only in a private rollback archive; it is not active.
 
-The native provider uses a dedicated vault account containing only the approved
-GitHub item. The user approved creating that account and copying the single
-1Password item through native credential exchange, retaining the original.
-Do not use the operator's broader vault account. Follow the separate
-[activation gates](github-passkey-activation.md) before private enrollment.
+The selected RP is `https://agent-test.bo0lean.com`. Preserve its existing
+`agent-test` account, enrolled passkey and dedicated Vaultwarden account. Preserve
+the earlier GitHub item and the 1Password original without repeating their copy.
 
-Install full Chromium, the pinned extension, `tigervnc-standalone-server`,
-`xauth` and `libnss3-tools`. Keep the extension root-owned under the path in
-`native.example.json`; verify the archive digest recorded in the native verifier.
-Add the same browser-specific AppArmor rule for `**/chrome`, preserving the
-global user-namespace restriction and Chromium's native sandbox.
+Follow the [native confirmation plan](agent-native-operator-plan.md). The intended
+replacement uses one private masked Mac confirmation per new native login and
+automates provider setup in the isolated browser. It must keep the official
+provider, master-password re-prompt, real WebAuthn assertion and expected-account
+checks. No MCP approval tool, stored human master password, VNC, cookie export or
+public debugging interface is permitted.
 
-Install the repository's native deployment files as root:
-
-| Source | Destination |
-| --- | --- |
-| `tools/agent-native-display.sh` | `/opt/vaultwarden-agent/bin/native-display` (0755) |
-| `tools/agent-native-broker.sh` | `/opt/vaultwarden-agent/bin/native-broker` (0755) |
-| `tools/vaultwarden-agent-display.service` | `/etc/systemd/system/vaultwarden-agent-display.service` |
-| `tools/vaultwarden-agent-broker.service` | `/etc/systemd/system/vaultwarden-agent-broker.service` |
-| `tools/agent-native-Caddyfile` | `/etc/vaultwarden-agent/Caddyfile` |
-| `tools/agent-native-compose.yml` | `/etc/vaultwarden-agent/compose.yml` |
-
-Create `/var/lib/vaultwarden-agent-tls` root-owned 0700. The separate pinned Caddy
-container binds HTTPS only to loopback and proxies the existing vault at port
-8080. It does not mount the production vault volume. Start it with the separate
-compose file, then export **only** `/data/caddy/pki/authorities/local/root.crt`
-using `docker exec ... cat` into `/etc/vaultwarden-agent/native-ca.crt` (0644).
-Never export its private key or use `docker cp` for tmpfs data. Verify `/alive`
-with that CA using normal TLS validation. No system trust-store change is needed.
-
-Copy the approved native profile metadata to
-`/var/lib/vaultwarden-agent/private/native.json`, owned by the broker and 0600.
-Replace the expected GitHub username and independently confirm its selectors.
-The native config contains no credentials. The forced SSH launcher always uses
-the shared broker socket; a missing broker fails closed. Switching providers
-changes the broker service, without weakening SSH restrictions.
-
-Run `systemd-analyze verify` on the installed units, reload systemd, and start
-`vaultwarden-agent-broker.service`. Its private display shares a temporary X
-namespace with the browser. The VNC socket directory is broker-owned, operator
-group `ubuntu`, mode 0710; the socket is 0660. The X authorization file remains
-0600. VNC TCP listeners and clipboard sharing are disabled. `SecurityTypes=None`
-is used only inside that permission-protected Unix socket and verified operator
-SSH forwarding; never expose it on TCP. The restricted MCP key cannot forward it.
-
-Before enrollment, verify the actual VNC handshake, socket permissions, absence
-of VNC TCP listeners, native sandboxing, and the broker's inability to read the
-TLS private state or production vault directory. Only then connect the human's
-viewer through a temporary administrator SSH tunnel. The operator privately
-selects the self-hosted environment `https://localhost:18443`, signs in to the
-dedicated account, and enables master-password re-prompt on the selected item.
-Do not capture the viewer, provider DOM, master password or native confirmation.
-
-The browser profile, NSS trust, cache and home live under private `/run` paths.
-Stopping the broker discards that runtime, so the operator must sign in again.
-Core dumps and raw service output are disabled; the browser has a 2 GiB memory
-limit and one CPU quota. The VNC service is also bounded. Stopping the display
-stops the broker. Keep both services manually started until real acceptance;
-there is no unattended vault unlock or bypass of native user verification.
-
-Rollback: stop the broker and display, close the operator tunnel, restore the
-previous launcher/configuration, and stop the separate TLS compose service.
-Retain its root-only state for rollback. The production vault service and its
-data remain independent. Verify health again after activation or rollback.
+Do not activate or claim this path until the actual provider, cancel/expiry/replay
+cases, privacy scan and current-chat owned-site login pass. Install only formal
+native dependencies and retain the browser sandbox, normal TLS validation,
+loopback-only vault proxy and existing production data. Deployment commands and
+rollback instructions will be added with the tested implementation.
 
 ## References
 
@@ -264,5 +239,4 @@ data remain independent. Verify health again after activation or rollback.
 - [Ubuntu user namespace restrictions](https://documentation.ubuntu.com/release-notes/24.04/#unprivileged-user-namespace-restrictions)
 - [Bitwarden CLI session-key generation](https://github.com/bitwarden/clients/blob/main/apps/cli/src/key-management/commands/unlock.command.ts)
 - [MCP contract and acceptance](agent-mcp-spec.md)
-- [TigerVNC Unix sockets and TCP disabling](https://tigervnc.org/doc/Xvnc.html)
 - [systemd shared private temporary namespace](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html#JoinsNamespaceOf=)

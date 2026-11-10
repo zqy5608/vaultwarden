@@ -6,6 +6,22 @@
     "password_selector": "input[type=password]",
     "submit_selector": "button[type=submit]",
     "success_selector": "a[href='/logout']",
-    "success_path": "/account"
+    "success_path": "/account",
+    "actions": {
+      "save-note": {
+        "url": "https://login.example.com/workspace",
+        "fields": {"note": "#note"},
+        "submit_selector": "#save-note",
+        "success_path": "/workspace",
+        "success_selector": "#workspace"
+      },
+      "sign-out": {
+        "url": "https://login.example.com/account",
+        "fields": {},
+        "submit_selector": "#logout",
+        "success_path": "/login",
+        "success_selector": "input[type=password]"
+      }
+    }
   }
 }

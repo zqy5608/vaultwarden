@@ -60,7 +60,7 @@ async def body_data(request: Request) -> dict:
             if isinstance(value, dict):
                 return value
         else:
-            form = parse_qs(body.decode(), strict_parsing=True)
+            form = parse_qs(body.decode(), strict_parsing=True, keep_blank_values=True)
             if all(len(values) == 1 for values in form.values()):
                 return {key: values[0] for key, values in form.items()}
     except (ValueError, UnicodeError):
@@ -79,9 +79,22 @@ async def page(request: Request) -> Response:
         )
     session = current_session(request)
     logged_in = session is not None and session["user_id"] is not None
-    if path == "/profile":
+    if path in {"/profile", "/workspace"}:
         if not logged_in:
             return RedirectResponse("/login", status_code=303)
+        if path == "/workspace":
+            with database(request.app.state.database) as db:
+                row = db.execute(
+                    "SELECT value FROM workspace_notes WHERE user_id=?",
+                    (session["user_id"],),
+                ).fetchone()
+            return HTMLResponse(
+                render(
+                    "workspace",
+                    username=session["username"],
+                    note=row["value"] if row else "",
+                )
+            )
         return HTMLResponse(render("profile", username=session["username"]))
     if logged_in:
         return RedirectResponse("/profile", status_code=303)
@@ -137,6 +150,46 @@ async def logout(request: Request) -> Response:
         COOKIE, path="/", secure=True, httponly=True, samesite="strict"
     )
     return response
+
+
+async def save_workspace(request: Request) -> Response:
+    session = require_user(request)
+    data = await body_data(request)
+    note = data.get("note")
+    if set(data) != {"note"} or not isinstance(note, str) or len(note) > 2048:
+        raise HTTPException(400, "invalid_workspace_note")
+    with database(request.app.state.database) as db:
+        if note:
+            db.execute(
+                "INSERT INTO workspace_notes VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET value=excluded.value",
+                (session["user_id"], note),
+            )
+        else:
+            db.execute(
+                "DELETE FROM workspace_notes WHERE user_id=?", (session["user_id"],)
+            )
+    return RedirectResponse("/workspace", status_code=303)
+
+
+async def check_workspace(request: Request) -> Response:
+    session = require_user(request)
+    data = await body_data(request)
+    expected = data.get("expected")
+    if (
+        set(data) != {"expected"}
+        or not isinstance(expected, str)
+        or len(expected) > 2048
+    ):
+        raise HTTPException(400, "invalid_workspace_note")
+    with database(request.app.state.database) as db:
+        row = db.execute(
+            "SELECT value FROM workspace_notes WHERE user_id=?", (session["user_id"],)
+        ).fetchone()
+    if (row["value"] if row else "") != expected:
+        raise HTTPException(409, "workspace_note_mismatch")
+    return HTMLResponse(
+        render("workspace", username=session["username"], note=expected, verified=True)
+    )
 
 
 async def options(request: Request) -> Response:
@@ -282,6 +335,7 @@ def create_app(origin: str, path: Path) -> Starlette:
             "/login",
             "/register",
             "/profile",
+            "/workspace",
             "/health",
             "/static/site.css",
             "/static/site.js",
@@ -291,6 +345,8 @@ def create_app(origin: str, path: Path) -> Starlette:
         Route(p, password_login, methods=["POST"]) for p in ["/login", "/register"]
     ]
     routes += [Route("/logout", logout, methods=["POST"])]
+    routes += [Route("/workspace", save_workspace, methods=["POST"])]
+    routes += [Route("/workspace/check", check_workspace, methods=["POST"])]
     routes += [
         Route(f"/{kind}/options", options, methods=["POST"])
         for kind in ["registration", "authentication"]
