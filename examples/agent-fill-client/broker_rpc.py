@@ -18,8 +18,15 @@ from browser_broker import BrowserBroker, read_config
 _UNAVAILABLE = {"status": "failed", "reason": "broker_unavailable"}
 
 
-async def call_broker(path: Path, method: str, site: str | None = None) -> dict:
-    """Send fixed actions only; never carry credentials or browser operations."""
+async def call_broker(
+    path: Path,
+    method: str,
+    site: str | None = None,
+    *,
+    action: str | None = None,
+    values: dict[str, str] | None = None,
+) -> dict:
+    """Send approved operations only; never carry credentials or arbitrary browser code."""
     writer = None
     try:
         async with asyncio.timeout(45):
@@ -27,6 +34,8 @@ async def call_broker(path: Path, method: str, site: str | None = None) -> dict:
             request = {"method": method}
             if site is not None:
                 request["site"] = site
+            if method == "action":
+                request.update(action=action, values=values)
             writer.write(json.dumps(request).encode() + b"\n")
             await writer.drain()
             response = json.loads(await reader.readline())
@@ -57,14 +66,30 @@ async def start_broker(path: Path, broker: BrowserBroker) -> asyncio.Server:
                     response = broker.sites()
                 elif (
                     isinstance(request, dict)
-                    and set(request) == {"method", "site"}
+                    and set(request)
+                    in ({"method", "site"}, {"method", "site", "action", "values"})
                     and isinstance(request["site"], str)
                     and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", request["site"])
                 ):
-                    if request["method"] == "login":
+                    if (
+                        request["method"] == "action"
+                        and set(request) == {"method", "site", "action", "values"}
+                        and isinstance(request["action"], str)
+                        and isinstance(request["values"], dict)
+                    ):
+                        response = await broker.action(
+                            request["site"], request["action"], request["values"]
+                        )
+                    elif set(request) != {"method", "site"}:
+                        response = dict(_UNAVAILABLE)
+                    elif request["method"] == "login":
                         response = await broker.login(request["site"])
                     elif request["method"] == "status":
                         response = await broker.status(request["site"])
+                    elif request["method"] == "actions":
+                        response = broker.actions(request["site"])
+                    elif request["method"] == "logout":
+                        response = await broker.logout(request["site"])
         except Exception:
             response = dict(_UNAVAILABLE)
         try:
@@ -73,7 +98,7 @@ async def start_broker(path: Path, broker: BrowserBroker) -> asyncio.Server:
         finally:
             writer.close()
 
-    server = await asyncio.start_unix_server(handle, str(path), limit=4096)
+    server = await asyncio.start_unix_server(handle, str(path), limit=32768)
     path.chmod(0o600)
     return server
 
