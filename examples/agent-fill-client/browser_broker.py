@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 import re
+import secrets
 import stat
 import tempfile
 import time
@@ -98,6 +99,7 @@ def validate_config(config: dict) -> None:
         "user_key",
         "sites",
         "headless",
+        "native",
     }
     if not isinstance(config, dict) or set(config) - allowed:
         raise BrokerError("invalid_config")
@@ -141,6 +143,10 @@ def validate_config(config: dict) -> None:
         ):
             raise BrokerError("invalid_site")
         _validate_actions(site)
+    if "native" in config:
+        _validate_native(config["native"])
+        if set(config["sites"]) & set(config["native"]["sites"]):
+            raise BrokerError("duplicate_site")
 
 
 def _validate_actions(site: dict) -> None:
@@ -196,13 +202,24 @@ def _validate_actions(site: dict) -> None:
 
 
 def _validate_native(config: dict) -> None:
-    if set(config) != {
+    if not isinstance(config, dict) or set(config) - {"operator"} != {
         "provider",
         "extension_path",
         "profile_path",
         "sites",
     }:
         raise BrokerError("invalid_config")
+    if "operator" in config:
+        operator = config["operator"]
+        if (
+            not isinstance(operator, dict)
+            or set(operator) != {"vault_origin", "email"}
+            or not isinstance(operator["vault_origin"], str)
+            or operator["vault_origin"] != origin(operator["vault_origin"])
+            or not isinstance(operator["email"], str)
+            or not re.fullmatch(r"[^\s@]{1,128}@[^\s@]{1,128}", operator["email"])
+        ):
+            raise BrokerError("invalid_operator")
     for key in ("extension_path", "profile_path"):
         if not isinstance(config[key], str) or not Path(config[key]).is_absolute():
             raise BrokerError("invalid_config")
@@ -322,6 +339,20 @@ class BrowserBroker:
         self.native_extension_origin = ""
         self.pending: dict[str, float] = {}
         self.native_verified: set[str] = set()
+        self.native_request: str | None = None
+        self.native_expiry = None
+        self.child = (
+            BrowserBroker(config["native"])
+            if config and not self.native and "native" in config
+            else None
+        )
+
+    def _delegate(self, name: str):
+        return self.child if self.child and self.child._site(name) else None
+
+    def operator_backend(self):
+        """The private operator endpoint is separate from the model-facing RPC."""
+        return self.child if self.child else self
 
     def sites(self) -> dict:
         if self.config is None:
@@ -331,10 +362,13 @@ class BrowserBroker:
             "sites": [
                 {"site": name, "origin": origin(site["login_url"])}
                 for name, site in self.config["sites"].items()
-            ],
+            ]
+            + (self.child.sites()["sites"] if self.child else []),
         }
 
     async def status(self, name: str) -> dict:
+        if child := self._delegate(name):
+            return await child.status(name)
         async with self.lock:
             site = self._site(name)
             if site is None:
@@ -365,6 +399,8 @@ class BrowserBroker:
         )
 
     def actions(self, name: str) -> dict:
+        if child := self._delegate(name):
+            return child.actions(name)
         site = self._site(name)
         if site is None:
             return {"status": "site_not_allowed" if self.config else "not_configured"}
@@ -421,6 +457,8 @@ class BrowserBroker:
             raise BrokerError("action_unconfirmed")
 
     async def action(self, name: str, operation: str, values: dict) -> dict:
+        if child := self._delegate(name):
+            return await child.action(name, operation, values)
         async with self.lock:
             site = self._site(name)
             if site is None:
@@ -464,6 +502,8 @@ class BrowserBroker:
                 }
 
     async def logout(self, name: str) -> dict:
+        if child := self._delegate(name):
+            return await child.logout(name)
         async with self.lock:
             site = self._site(name)
             if site is None:
@@ -566,6 +606,7 @@ class BrowserBroker:
                 f"--disable-extensions-except={extension}",
                 f"--load-extension={extension}",
             ],
+            **self._native_proxy(),
         )
         self.browser = self.native_context.browser
         await self.native_context.clear_cookies()
@@ -588,6 +629,24 @@ class BrowserBroker:
             if page is not operator:
                 await self._quiet_close(page)
         await operator.goto(self.native_extension_origin + "/popup/index.html#/login")
+
+    def _native_proxy(self) -> dict:
+        if "operator" not in self.config:
+            return {}
+        allowed = {self.config["operator"]["vault_origin"]}
+        for site in self.config["sites"].values():
+            allowed.add(origin(site["login_url"]))
+            allowed.update(site["resource_origins"])
+        return {
+            "proxy": {
+                "server": "http://127.0.0.1:0",
+                "bypass": "<-loopback>,"
+                + ",".join(
+                    value if urlsplit(value).port else value + ":443"
+                    for value in sorted(allowed)
+                ),
+            }
+        }
 
     async def _watch_native_verification(self, page) -> None:
         try:
@@ -640,6 +699,15 @@ class BrowserBroker:
                             break
         except Exception:
             allowed = False
+        if (
+            allowed
+            and "operator" in self.config
+            and (
+                request.service_worker is not None
+                or request.frame.url.startswith(self.native_extension_origin + "/")
+            )
+        ):
+            allowed = origin(request.url) == self.config["operator"]["vault_origin"]
         await (route.continue_() if allowed else route.abort())
 
     async def _native_status(self, name: str, site: dict) -> dict:
@@ -656,6 +724,7 @@ class BrowserBroker:
                     "site": name,
                 }
             self.pending.pop(name, None)
+            self.native_request = None
             return {"status": "authenticated", "site": name}
         if name in self.pending:
             return {"status": "needs_approval", "site": name}
@@ -690,7 +759,13 @@ class BrowserBroker:
             ):
                 raise BrokerError("unsafe_form")
             self.pending[name] = time.monotonic() + _APPROVAL_SECONDS
-            await button.click()
+            if "operator" in self.config:
+                self.native_request = secrets.token_urlsafe(32)
+                self.native_expiry = asyncio.create_task(
+                    self._expire_native(name, self.native_request)
+                )
+            else:
+                await button.click()
             return await self._native_status(name, site)
         except Exception:
             await self.close()
@@ -699,6 +774,12 @@ class BrowserBroker:
                 "reason": "native_login_unconfirmed",
                 "site": name,
             }
+
+    async def _expire_native(self, name: str, request: str) -> None:
+        await asyncio.sleep(_APPROVAL_SECONDS)
+        async with self.lock:
+            if name in self.pending and self.native_request == request:
+                await self.close()
 
     def _credentials(self, site: dict) -> dict:
         config = self.config
@@ -771,6 +852,8 @@ class BrowserBroker:
         }
 
     async def login(self, name: str) -> dict:
+        if child := self._delegate(name):
+            return await child.login(name)
         async with self.lock:
             site = self._site(name)
             if site is None:
@@ -866,6 +949,11 @@ class BrowserBroker:
                     await self._quiet_close(context)
 
     async def close(self) -> None:
+        if self.native_expiry and self.native_expiry is not asyncio.current_task():
+            self.native_expiry.cancel()
+        self.native_expiry = None
+        if self.child:
+            await self.child.close()
         if self.native_context is not None:
             await self._quiet_close(self.native_context)
         elif self.browser is not None:
@@ -881,3 +969,4 @@ class BrowserBroker:
         self.native_context = None
         self.pending.clear()
         self.native_verified.clear()
+        self.native_request = None
