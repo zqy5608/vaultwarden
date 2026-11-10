@@ -10,6 +10,7 @@ on:
       - "tools/verify-agent-native.py"
       - "tools/agent-*.sh"
       - "tools/agent-native-*"
+      - "tools/agent-mcp-connect.py"
       - "tools/agent-automation-*"
       - "tools/vaultwarden-agent-*.service"
       - ".github/workflows/agent-client.yml"
@@ -21,6 +22,7 @@ on:
       - "tools/verify-agent-native.py"
       - "tools/agent-*.sh"
       - "tools/agent-native-*"
+      - "tools/agent-mcp-connect.py"
       - "tools/agent-automation-*"
       - "tools/vaultwarden-agent-*.service"
       - ".github/workflows/agent-client.yml"
@@ -105,6 +107,7 @@ jobs:
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_actions.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_broker_rpc.py
           "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_native.py
+          "$RUNNER_TEMP/agent-client/bin/python" examples/agent-fill-client/test_operator.py
           "$RUNNER_TEMP/agent-client/bin/python" -m unittest discover -s examples/agent-test-site -p 'test_*.py'
 
   native-provider:
