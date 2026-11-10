@@ -375,19 +375,32 @@ Use a volatile runtime directory for the profile, browser home, cache and
 configuration. Prepare any local TLS trust only in that browser user's NSS
 database; never disable certificate verification or change the system trust store.
 
-The operator privately enrolls the correct self-hosted account in the native UI.
-Operator-opened pages at the approved site's exact origin also support private
-account/passkey enrollment. They do not create an authenticated MCP session;
-unapproved destinations and cross-origin credential submissions remain blocked.
-`vault_login` then returns `needs_approval` while the operator selects the passkey
-and completes native confirmation. `vault_status` checks the post-login path,
-visible success element and expected account selector. It also requires the
-provider's password-confirmation field to have appeared for this pending request;
-it never reads its value. Approval expires after five minutes and closes the
-private browser. Do not automate confirmation for a personal credential.
+Set the optional `operator` metadata to the dedicated vault's exact HTTPS origin
+and email. Add the native configuration under `native` in the password broker's
+configuration to expose distinct password and passkey site names together.
+`vault_login` prepares the approved website and returns `needs_approval`; it does
+not start signing before private human input. The local MCP connection helper
+then offers a masked macOS dialog. The operator enters the dedicated vault master
+password once for that pending request. The isolated worker configures the
+provider, signs in, selects exactly one matching passkey, and completes the
+required provider re-prompt with that fresh input. The input is discarded after
+the ceremony. A valid website session requires no repeat confirmation.
 
-One native site per runtime keeps confirmation bound to the requested site.
-There is no arbitrary URL, page, cookie, screenshot or credential-export tool.
+This private channel uses `--operator-socket` and a distinct restricted SSH key.
+Its nonce is bound to the site and one connection; cancellation, disconnect,
+wrong input, expiry and replay fail closed. No operator method or password field
+is added to the six MCP tools. The local helper captures native dialog output
+privately and sends it only to the operator SSH pipe, never MCP, process arguments,
+environment, files or diagnostics. Keep this helper on the trusted operator Mac;
+like the rest of the integration, it does not isolate secrets from a hostile OS
+administrator or an agent able to inspect trusted process memory.
+
+Native Chromium connects only to the configured vault, RP and static-resource
+origins, including redirects. Normal TLS, the browser sandbox, the official
+extension, required re-prompt and the expected account check remain enabled.
+Xvfb provides only a private display; no VNC or remote-desktop viewer is needed.
+The source implementation is in 0.1.10; formal activation still requires the
+[release gates](../../docs/agent-native-operator-plan.md).
 
 ### Verify the complete flow
 
@@ -399,8 +412,8 @@ There is no arbitrary URL, page, cookie, screenshot or credential-export tool.
 The second command creates a private, disposable local Vaultwarden instance,
 registers a user through the normal API, stores type-2 encrypted demo credentials
 with a wrapped item key, publishes the URI index, creates scoped credentials,
-and uses the actual MCP stdio transport to log in to the external HTTPS
-demonstration at `the-internet.herokuapp.com`. Demo values are read and used
+and uses the actual MCP stdio transport to log in to the owned HTTPS site
+at `agent-test.bo0lean.com`, perform a persisted task and log out. Fixture values are read and used
 inside the trusted verifier; they are never printed. MCP output and diagnostics
 are scanned for credentials and keys. It terminates its browser and local
 server. A private temporary directory is retained for operator diagnosis; move
