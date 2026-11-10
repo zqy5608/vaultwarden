@@ -127,6 +127,7 @@ def password_config(
                 "submit_selector": "#password-submit",
                 "success_selector": "#profile",
                 "success_path": "/profile",
+                "actions": workspace_actions(site_origin),
             }
         },
     }
@@ -134,6 +135,33 @@ def password_config(
         "account_unlock_failed"
     )
     return config
+
+
+def workspace_actions(site_origin):
+    """Public operation metadata shared by owned-site provisioning and acceptance."""
+    return {
+        "save-note": {
+            "url": site_origin + "/workspace",
+            "fields": {"note": "#note"},
+            "submit_selector": "#save-note",
+            "success_path": "/workspace",
+            "success_selector": "#workspace",
+        },
+        "check-note": {
+            "url": site_origin + "/workspace",
+            "fields": {"expected": "#expected-note"},
+            "submit_selector": "#check-note",
+            "success_path": "/workspace/check",
+            "success_selector": "#note-matches",
+        },
+        "sign-out": {
+            "url": site_origin + "/profile",
+            "fields": {},
+            "submit_selector": "#logout",
+            "success_path": "/login",
+            "success_selector": "#password",
+        },
+    }
 
 
 async def call_mcp(config_path, diagnostics, secret_values):
@@ -182,6 +210,9 @@ async def call_mcp(config_path, diagnostics, secret_values):
             "vault_sites",
             "vault_login",
             "vault_status",
+            "vault_actions",
+            "vault_action",
+            "vault_logout",
         }
         for tool, arguments in [
             ("vault_sites", {}),
@@ -212,6 +243,56 @@ async def call_mcp(config_path, diagnostics, secret_values):
             assert view(result)["status"] == "authenticated", (
                 "concurrent_session_not_confirmed"
             )
+        for tool, arguments, expected in [
+            ("vault_actions", {"site": "agent-test"}, "ready"),
+            (
+                "vault_action",
+                {
+                    "site": "agent-test",
+                    "action": "save-note",
+                    "values": {"note": "MCP workspace acceptance"},
+                },
+                "completed",
+            ),
+            ("vault_status", {"site": "agent-test"}, "authenticated"),
+            (
+                "vault_action",
+                {
+                    "site": "agent-test",
+                    "action": "check-note",
+                    "values": {"expected": "MCP workspace acceptance"},
+                },
+                "completed",
+            ),
+            (
+                "vault_action",
+                {"site": "agent-test", "action": "save-note", "values": {"note": ""}},
+                "completed",
+            ),
+            (
+                "vault_action",
+                {
+                    "site": "agent-test",
+                    "action": "check-note",
+                    "values": {"expected": ""},
+                },
+                "completed",
+            ),
+            ("vault_logout", {"site": "agent-test"}, "not_authenticated"),
+            (
+                "vault_action",
+                {
+                    "site": "agent-test",
+                    "action": "save-note",
+                    "values": {"note": "not authorized"},
+                },
+                "not_authenticated",
+            ),
+            ("vault_login", {"site": "agent-test"}, "authenticated"),
+        ]:
+            result = await client.call_tool(tool, arguments)
+            transcripts.append(result.model_dump_json())
+            assert view(result)["status"] == expected, "workspace_flow_not_confirmed"
     wire = "\n".join(transcripts)
     diagnostics.flush()
     diagnostics.seek(0)
@@ -225,6 +306,8 @@ async def call_mcp(config_path, diagnostics, secret_values):
         "real_https_login": "passed",
         "retained_session": "passed",
         "concurrent_session_calls": "passed",
+        "post_login_persisted_operation": "passed",
+        "logout_and_reauthentication": "passed",
         "unapproved_site": "denied",
         "secret_output_scan": "passed",
     }

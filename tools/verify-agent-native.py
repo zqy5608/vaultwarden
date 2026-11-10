@@ -269,7 +269,14 @@ async def native_mcp_flow(runtime, broker, operator, password, username) -> dict
                 ClientSession(read, write) as client,
             ):
                 await client.initialize()
-                assert len((await client.list_tools()).tools) == 3
+                assert {tool.name for tool in (await client.list_tools()).tools} == {
+                    "vault_sites",
+                    "vault_login",
+                    "vault_status",
+                    "vault_actions",
+                    "vault_action",
+                    "vault_logout",
+                }
                 assert (await call(client, "vault_sites"))["status"] == "ready"
                 progress("native_mcp_login")
                 async with context.expect_page(

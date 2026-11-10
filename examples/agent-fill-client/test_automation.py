@@ -96,6 +96,32 @@ class AutomationTests(unittest.TestCase):
         ):
             automation.initialize()
 
+    def test_configure_adds_operations_without_replacing_credentials(self):
+        from test_mcp import config
+
+        data = config()
+        site = data["sites"].pop("example")
+        site["login_url"] = automation.SITE + "/login"
+        data["sites"]["agent-test"] = site
+        output = io.StringIO()
+        with (
+            patch.object(automation.os, "geteuid", return_value=0),
+            patch.object(
+                automation, "run", side_effect=[json.dumps(data).encode(), b""]
+            ),
+            patch.object(automation, "seal") as seal,
+            contextlib.redirect_stdout(output),
+        ):
+            self.assertEqual(automation.main("configure"), 0)
+        replacement = json.loads(seal.call_args.args[1])
+        for key in ["user_key", "agent_token", "fill_token", "fill_agent_id"]:
+            self.assertEqual(replacement[key], data[key])
+            self.assertNotIn(data[key], output.getvalue())
+        self.assertEqual(
+            set(replacement["sites"]["agent-test"]["actions"]),
+            {"save-note", "check-note", "sign-out"},
+        )
+
     def test_private_exception_is_not_reflected(self):
         output = io.StringIO()
         with (

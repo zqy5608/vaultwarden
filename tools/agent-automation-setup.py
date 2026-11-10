@@ -221,6 +221,7 @@ def initialize():
                 "password_selector": "#password",
                 "submit_selector": "#password-submit",
                 "success_path": "/profile",
+                "actions": HELPERS["workspace_actions"](SITE),
                 "success_selector": "html:has(meta[name='agent-test-user'][content='"
                 + username
                 + "']) #profile",
@@ -271,6 +272,23 @@ def main(action):
             raise PermissionError("administrator_required")
         if action == "init":
             initialize()
+        elif action == "configure":
+            config = json.loads(
+                run(
+                    [
+                        "/usr/bin/systemd-creds",
+                        "decrypt",
+                        "--name=broker-config",
+                        str(SEALED),
+                        "-",
+                    ]
+                )
+            )
+            config["sites"]["agent-test"]["actions"] = HELPERS["workspace_actions"](
+                SITE
+            )
+            validate_config(config)
+            seal("broker-config", json.dumps(config).encode(), SEALED)
         else:
             change_credentials(action)
         stage = "broker_restart"
@@ -300,5 +318,5 @@ def main(action):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["init", "revoke", "rotate"])
+    parser.add_argument("action", choices=["init", "revoke", "rotate", "configure"])
     raise SystemExit(main(parser.parse_args().action))
