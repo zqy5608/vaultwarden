@@ -24,6 +24,8 @@ Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/vaultwarden-agent/browsers
 Environment=SSL_CERT_FILE=%d/automation-ca
 ExecStartPre=/usr/bin/install -m 0600 %d/broker-config /run/vaultwarden-agent/broker-config
 ExecStart=/opt/vaultwarden-agent/bin/native-broker
+Restart=on-failure
+RestartSec=3
 NoNewPrivileges=true
 CapabilityBoundingSet=
 ProtectSystem=strict
